@@ -9,6 +9,9 @@ version = "0.1.0"
 
 [dependencies]
 clap = { version = "4.6.4", features = ["derive"] }
+comfy-table = "7.2.2"
+tree-sitter = "0.26.11"
+tree-sitter-swift = "0.7.3"
 
 [lints.clippy]
 cognitive_complexity = "warn"

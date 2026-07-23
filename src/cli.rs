@@ -2,4 +2,5 @@
 //! No domain logic lives here.
 
 pub mod analyze;
+pub mod complexity;
 pub mod router;
