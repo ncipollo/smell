@@ -24,7 +24,7 @@ pub fn run(path: PathBuf) -> ExitCode {
 fn print_file(report: &FileReport) {
     println!("{}", report.path.display());
     let mut table = Table::new();
-    table.set_header(["Function", "Complexity (branches)"]);
+    table.set_header(["Function", "Complexity"]);
     for complexity_type in &report.complexity.types {
         add_group_rows(
             &mut table,
@@ -55,7 +55,7 @@ fn add_group_rows(
     for function in functions {
         table.add_row([
             format!("  {}", function.name),
-            function.branches.to_string(),
+            function.complexity.to_string(),
         ]);
     }
 }
@@ -70,6 +70,6 @@ fn add_rollup_row(table: &mut Table, name: &str, rollup: &ComplexityRollup) {
 fn format_rollup(rollup: &ComplexityRollup) -> String {
     format!(
         "total {} · max {} · avg {:.1}",
-        rollup.total_branches, rollup.max_branches, rollup.average_branches
+        rollup.total, rollup.max, rollup.average
     )
 }

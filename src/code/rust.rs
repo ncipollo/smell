@@ -17,7 +17,7 @@ const BRANCH_KINDS: &[&str] = &[
 
 const TYPE_KINDS: &[&str] = &["struct_item", "enum_item", "trait_item", "union_item"];
 
-/// Parses Rust source and returns the branch complexity of each function,
+/// Parses Rust source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
 pub fn file_complexity(source: &str) -> FileComplexity {
     collector::file_complexity(&tree_sitter_rust::LANGUAGE.into(), &RustRules, source)
@@ -36,7 +36,7 @@ impl LanguageRules for RustRules {
             "impl_item" => Visit::Type(collector::field_text(node, "type", source)),
             "function_item" => Visit::Functions(vec![FunctionComplexity {
                 name: collector::field_text(node, "name", source),
-                branches: collector::count_branches(node, source, self),
+                complexity: collector::complexity(node, source, self),
             }]),
             _ => Visit::Skip,
         }
@@ -47,6 +47,8 @@ impl LanguageRules for RustRules {
             "binary_expression" => is_boolean_operator(node),
             // let-else hides an early exit in its else block.
             "let_declaration" => node.child_by_field_name("alternative").is_some(),
+            // A guard adds a decision on top of its match arm.
+            "match_pattern" => node.child_by_field_name("condition").is_some(),
             kind => BRANCH_KINDS.contains(&kind),
         }
     }
@@ -68,11 +70,11 @@ mod tests {
         assert_eq!(
             testing::top_level_summary(&complexity),
             vec![
-                ("simple".to_string(), 0),
-                ("branchy".to_string(), 12),
-                ("fallible".to_string(), 1),
-                ("maybe".to_string(), 0),
-                ("parse".to_string(), 0),
+                ("simple".to_string(), 1),
+                ("branchy".to_string(), 15),
+                ("fallible".to_string(), 2),
+                ("maybe".to_string(), 1),
+                ("parse".to_string(), 1),
             ]
         );
         assert_eq!(
@@ -80,10 +82,10 @@ mod tests {
             vec![
                 (
                     "Shape".to_string(),
-                    vec![("area".to_string(), 1), ("fmt".to_string(), 1)],
+                    vec![("area".to_string(), 2), ("fmt".to_string(), 2)],
                 ),
-                ("Kind".to_string(), vec![("label".to_string(), 2)]),
-                ("Describe".to_string(), vec![("describe".to_string(), 0)]),
+                ("Kind".to_string(), vec![("label".to_string(), 3)]),
+                ("Describe".to_string(), vec![("describe".to_string(), 1)]),
             ]
         );
     }

@@ -15,16 +15,16 @@ pub fn fixture(relative_path: &str) -> String {
         .unwrap_or_else(|error| panic!("failed to read fixture {}: {error}", path.display()))
 }
 
-/// Summarizes top-level functions as `(name, branches)` pairs for assertions.
+/// Summarizes top-level functions as `(name, complexity)` pairs for assertions.
 pub fn top_level_summary(complexity: &FileComplexity) -> Vec<(String, usize)> {
     complexity
         .functions
         .iter()
-        .map(|function| (function.name.clone(), function.branches))
+        .map(|function| (function.name.clone(), function.complexity))
         .collect()
 }
 
-/// Summarizes each type as `(name, [(function, branches)])` for assertions.
+/// Summarizes each type as `(name, [(function, complexity)])` for assertions.
 pub fn type_summary(complexity: &FileComplexity) -> Vec<(String, Vec<(String, usize)>)> {
     complexity
         .types
@@ -33,7 +33,7 @@ pub fn type_summary(complexity: &FileComplexity) -> Vec<(String, Vec<(String, us
             let functions = complexity_type
                 .functions
                 .iter()
-                .map(|function| (function.name.clone(), function.branches))
+                .map(|function| (function.name.clone(), function.complexity))
                 .collect();
             (complexity_type.name.clone(), functions)
         })

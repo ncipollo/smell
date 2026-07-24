@@ -12,7 +12,7 @@ pub struct FileReport {
 }
 
 /// Analyzes the source files at the given path (a single file or a directory
-/// searched recursively) and reports branch complexity per function.
+/// searched recursively) and reports cyclomatic complexity per function.
 pub fn analyze(path: &Path) -> io::Result<Vec<FileReport>> {
     let mut files = source_files(path)?;
     files.sort();

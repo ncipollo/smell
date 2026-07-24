@@ -14,7 +14,7 @@ const BRANCH_KINDS: &[&str] = &[
     "catch_block",
 ];
 
-/// Parses Kotlin source and returns the branch complexity of each function,
+/// Parses Kotlin source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
 pub fn file_complexity(source: &str) -> FileComplexity {
     collector::file_complexity(
@@ -65,7 +65,7 @@ fn named_function(node: Node, source: &str) -> FunctionComplexity {
 fn function(node: Node, source: &str, name: &str) -> FunctionComplexity {
     FunctionComplexity {
         name: name.to_string(),
-        branches: collector::count_branches(node, source, &KotlinRules),
+        complexity: collector::complexity(node, source, &KotlinRules),
     }
 }
 
@@ -115,9 +115,9 @@ mod tests {
         assert_eq!(
             testing::top_level_summary(&complexity),
             vec![
-                ("simple".to_string(), 0),
-                ("branchy".to_string(), 13),
-                ("canThrow".to_string(), 0),
+                ("simple".to_string(), 1),
+                ("branchy".to_string(), 14),
+                ("canThrow".to_string(), 1),
             ]
         );
         assert_eq!(
@@ -126,17 +126,17 @@ mod tests {
                 (
                     "Shape".to_string(),
                     vec![
-                        ("area.get".to_string(), 1),
-                        ("label.get".to_string(), 1),
-                        ("label.set".to_string(), 1),
-                        ("init".to_string(), 1),
-                        ("constructor".to_string(), 1),
-                        ("describe".to_string(), 1),
+                        ("area.get".to_string(), 2),
+                        ("label.get".to_string(), 2),
+                        ("label.set".to_string(), 2),
+                        ("init".to_string(), 2),
+                        ("constructor".to_string(), 2),
+                        ("describe".to_string(), 2),
                     ],
                 ),
-                ("Shape.Companion".to_string(), vec![("unit".to_string(), 0)]),
-                ("Registry".to_string(), vec![("register".to_string(), 0)]),
-                ("Labeled".to_string(), vec![("label".to_string(), 1)]),
+                ("Shape.Companion".to_string(), vec![("unit".to_string(), 1)]),
+                ("Registry".to_string(), vec![("register".to_string(), 1)]),
+                ("Labeled".to_string(), vec![("label".to_string(), 2)]),
             ]
         );
     }

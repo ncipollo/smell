@@ -21,7 +21,7 @@ const BRANCH_KINDS: &[&str] = &[
 
 const TYPE_KINDS: &[&str] = &["class_declaration", "protocol_declaration"];
 
-/// Parses Swift source and returns the branch complexity of each function,
+/// Parses Swift source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
 pub fn file_complexity(source: &str) -> FileComplexity {
     collector::file_complexity(&tree_sitter_swift::LANGUAGE.into(), &SwiftRules, source)
@@ -37,16 +37,27 @@ impl LanguageRules for SwiftRules {
             }
             "function_declaration" => Visit::Functions(vec![FunctionComplexity {
                 name: collector::field_text(node, "name", source),
-                branches: collector::count_branches(node, source, self),
+                complexity: collector::complexity(node, source, self),
             }]),
             "property_declaration" => Visit::Functions(property_functions(node, source)),
             _ => Visit::Skip,
         }
     }
 
-    fn is_branch(&self, node: Node, _source: &str) -> bool {
-        BRANCH_KINDS.contains(&node.kind())
+    fn is_branch(&self, node: Node, source: &str) -> bool {
+        match node.kind() {
+            // `try?` hides a branch to nil; plain `try` and `try!` do not
+            // create an in-function branch.
+            "try_expression" => is_optional_try(node, source),
+            kind => BRANCH_KINDS.contains(&kind),
+        }
     }
+}
+
+fn is_optional_try(node: Node, source: &str) -> bool {
+    collector::find_child(node, "try_operator")
+        .and_then(|operator| operator.utf8_text(source.as_bytes()).ok())
+        .is_some_and(|text| text == "try?")
 }
 
 fn property_functions(node: Node, source: &str) -> Vec<FunctionComplexity> {
@@ -75,7 +86,7 @@ fn collect_computed_accessors(
     if accessors.is_empty() {
         functions.push(FunctionComplexity {
             name: name.to_string(),
-            branches: collector::count_branches(computed, source, &SwiftRules),
+            complexity: collector::complexity(computed, source, &SwiftRules),
         });
         return;
     }
@@ -87,7 +98,7 @@ fn collect_computed_accessors(
         };
         functions.push(FunctionComplexity {
             name: format!("{name}.{suffix}"),
-            branches: collector::count_branches(accessor, source, &SwiftRules),
+            complexity: collector::complexity(accessor, source, &SwiftRules),
         });
     }
 }
@@ -107,7 +118,7 @@ fn collect_observers(
         };
         functions.push(FunctionComplexity {
             name: format!("{name}.{suffix}"),
-            branches: collector::count_branches(clause, source, &SwiftRules),
+            complexity: collector::complexity(clause, source, &SwiftRules),
         });
     }
 }
@@ -131,9 +142,9 @@ mod tests {
         assert_eq!(
             testing::top_level_summary(&complexity),
             vec![
-                ("canThrow".to_string(), 0),
-                ("simple".to_string(), 0),
-                ("branchy".to_string(), 15),
+                ("canThrow".to_string(), 1),
+                ("simple".to_string(), 1),
+                ("branchy".to_string(), 17),
             ]
         );
         assert_eq!(
@@ -141,12 +152,12 @@ mod tests {
             vec![(
                 "Shape".to_string(),
                 vec![
-                    ("area".to_string(), 1),
-                    ("label.get".to_string(), 1),
-                    ("label.set".to_string(), 1),
-                    ("count.willSet".to_string(), 1),
-                    ("count.didSet".to_string(), 1),
-                    ("describe".to_string(), 1),
+                    ("area".to_string(), 2),
+                    ("label.get".to_string(), 2),
+                    ("label.set".to_string(), 2),
+                    ("count.willSet".to_string(), 2),
+                    ("count.didSet".to_string(), 2),
+                    ("describe".to_string(), 2),
                 ],
             )]
         );

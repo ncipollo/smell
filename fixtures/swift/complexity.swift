@@ -38,6 +38,7 @@ func branchy(x: Int) -> Int {
     } catch {
         return -1
     }
+    _ = try? canThrow()
     return y
 }
 

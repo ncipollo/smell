@@ -9,7 +9,8 @@ pub mod swift;
 
 pub struct FunctionComplexity {
     pub name: String,
-    pub branches: usize,
+    /// Cyclomatic complexity: a baseline of 1 plus one per branch.
+    pub complexity: usize,
 }
 
 /// A class/struct/enum/trait-like declaration and the functions it contains.
@@ -25,9 +26,9 @@ pub struct FileComplexity {
 }
 
 pub struct ComplexityRollup {
-    pub total_branches: usize,
-    pub max_branches: usize,
-    pub average_branches: f64,
+    pub total: usize,
+    pub max: usize,
+    pub average: f64,
 }
 
 impl ComplexityRollup {
@@ -50,17 +51,17 @@ impl FileComplexity {
 }
 
 fn rollup<'a>(functions: impl Iterator<Item = &'a FunctionComplexity>) -> ComplexityRollup {
-    let branches: Vec<usize> = functions.map(|function| function.branches).collect();
-    let total_branches: usize = branches.iter().sum();
-    let average_branches = if branches.is_empty() {
+    let complexities: Vec<usize> = functions.map(|function| function.complexity).collect();
+    let total: usize = complexities.iter().sum();
+    let average = if complexities.is_empty() {
         0.0
     } else {
-        total_branches as f64 / branches.len() as f64
+        total as f64 / complexities.len() as f64
     };
     ComplexityRollup {
-        total_branches,
-        max_branches: branches.iter().copied().max().unwrap_or(0),
-        average_branches,
+        total,
+        max: complexities.iter().copied().max().unwrap_or(0),
+        average,
     }
 }
 
@@ -68,10 +69,10 @@ fn rollup<'a>(functions: impl Iterator<Item = &'a FunctionComplexity>) -> Comple
 mod tests {
     use super::*;
 
-    fn function(name: &str, branches: usize) -> FunctionComplexity {
+    fn function(name: &str, complexity: usize) -> FunctionComplexity {
         FunctionComplexity {
             name: name.to_string(),
-            branches,
+            complexity,
         }
     }
 
@@ -82,21 +83,21 @@ mod tests {
             functions: Vec::new(),
         };
         let rollup = complexity.rollup();
-        assert_eq!(rollup.total_branches, 0);
-        assert_eq!(rollup.max_branches, 0);
-        assert_eq!(rollup.average_branches, 0.0);
+        assert_eq!(rollup.total, 0);
+        assert_eq!(rollup.max, 0);
+        assert_eq!(rollup.average, 0.0);
     }
 
     #[test]
-    fn rollup_of_single_function_matches_its_branches() {
+    fn rollup_of_single_function_matches_its_complexity() {
         let complexity = TypeComplexity {
             name: "Single".to_string(),
             functions: vec![function("only", 3)],
         };
         let rollup = complexity.rollup();
-        assert_eq!(rollup.total_branches, 3);
-        assert_eq!(rollup.max_branches, 3);
-        assert_eq!(rollup.average_branches, 3.0);
+        assert_eq!(rollup.total, 3);
+        assert_eq!(rollup.max, 3);
+        assert_eq!(rollup.average, 3.0);
     }
 
     #[test]
@@ -109,8 +110,8 @@ mod tests {
             }],
         };
         let rollup = complexity.rollup();
-        assert_eq!(rollup.total_branches, 12);
-        assert_eq!(rollup.max_branches, 7);
-        assert_eq!(rollup.average_branches, 4.0);
+        assert_eq!(rollup.total, 12);
+        assert_eq!(rollup.max, 7);
+        assert_eq!(rollup.average, 4.0);
     }
 }

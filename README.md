@@ -1,6 +1,6 @@
 # smell
 
-CLI tool for static code analysis. Reports branch complexity per function, grouped by type and file.
+CLI tool for static code analysis. Reports cyclomatic complexity per function, grouped by type and file. Each function starts at 1 (the straight-line path); every branch — conditionals, loops, switch arms, catch clauses, short-circuit operators, and hidden branches like Rust `?` or Swift `try?` — adds 1.
 
 ## Install
 
@@ -24,23 +24,23 @@ smell complexity src/main/java         # a directory of Java sources
 ```
 src/shape.rs
 +-------------+-----------------------------+
-| Function    | Complexity (branches)       |
+| Function    | Complexity                  |
 +===========================================+
-| Shape       | total 2 · max 1 · avg 1.0   |
+| Shape       | total 4 · max 2 · avg 2.0   |
 |-------------+-----------------------------|
-|   area      | 1                           |
+|   area      | 2                           |
 |-------------+-----------------------------|
-|   fmt       | 1                           |
+|   fmt       | 2                           |
 |-------------+-----------------------------|
-| (top-level) | total 13 · max 12 · avg 2.6 |
+| (top-level) | total 18 · max 15 · avg 6.0 |
 |-------------+-----------------------------|
-|   simple    | 0                           |
+|   simple    | 1                           |
 |-------------+-----------------------------|
-|   branchy   | 12                          |
+|   branchy   | 15                          |
 |-------------+-----------------------------|
-|   fallible  | 1                           |
+|   fallible  | 2                           |
 |-------------+-----------------------------|
-| file        | total 15 · max 12 · avg 2.1 |
+| file        | total 22 · max 15 · avg 4.4 |
 +-------------+-----------------------------+
 ```
 

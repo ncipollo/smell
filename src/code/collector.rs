@@ -43,8 +43,14 @@ pub fn file_complexity(
     file
 }
 
+/// Cyclomatic complexity of a function node: a baseline of 1 for the
+/// straight-line path plus one per branch node within it.
+pub fn complexity(node: Node, source: &str, rules: &impl LanguageRules) -> usize {
+    1 + count_branches(node, source, rules)
+}
+
 /// Counts branch nodes within (but not including) the given node.
-pub fn count_branches(node: Node, source: &str, rules: &impl LanguageRules) -> usize {
+fn count_branches(node: Node, source: &str, rules: &impl LanguageRules) -> usize {
     let mut branches = 0;
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {

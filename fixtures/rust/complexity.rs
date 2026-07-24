@@ -22,6 +22,7 @@ fn branchy(x: i32) -> i32 {
     match x {
         1 => return 1,
         2 => return 2,
+        n if n > 50 => return 50,
         _ => {}
     }
     if x > 1 && x < 100 || x == -5 {

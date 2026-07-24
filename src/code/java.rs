@@ -31,7 +31,7 @@ const FUNCTION_KINDS: &[&str] = &[
     "compact_constructor_declaration",
 ];
 
-/// Parses Java source and returns the branch complexity of each function,
+/// Parses Java source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
 pub fn file_complexity(source: &str) -> FileComplexity {
     collector::file_complexity(&tree_sitter_java::LANGUAGE.into(), &JavaRules, source)
@@ -47,7 +47,7 @@ impl LanguageRules for JavaRules {
             }
             kind if FUNCTION_KINDS.contains(&kind) => Visit::Functions(vec![FunctionComplexity {
                 name: collector::field_text(node, "name", source),
-                branches: collector::count_branches(node, source, self),
+                complexity: collector::complexity(node, source, self),
             }]),
             _ => Visit::Skip,
         }
@@ -81,14 +81,14 @@ mod tests {
                 (
                     "Complexity".to_string(),
                     vec![
-                        ("Complexity".to_string(), 1),
-                        ("branchy".to_string(), 16),
-                        ("canThrow".to_string(), 0),
+                        ("Complexity".to_string(), 2),
+                        ("branchy".to_string(), 17),
+                        ("canThrow".to_string(), 1),
                     ],
                 ),
-                ("Labeled".to_string(), vec![("label".to_string(), 1)]),
-                ("Kind".to_string(), vec![("isCircle".to_string(), 0)]),
-                ("Point".to_string(), vec![("Point".to_string(), 1)]),
+                ("Labeled".to_string(), vec![("label".to_string(), 2)]),
+                ("Kind".to_string(), vec![("isCircle".to_string(), 1)]),
+                ("Point".to_string(), vec![("Point".to_string(), 2)]),
             ]
         );
     }

@@ -14,7 +14,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Report branch complexity per function, broken down by file.
+    /// Report cyclomatic complexity per function, broken down by file.
     Complexity {
         /// Source file or directory to analyze (Swift, Rust, Kotlin, Java;
         /// directories are searched recursively).
