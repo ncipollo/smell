@@ -3,7 +3,6 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use crate::cli::analyze;
 use crate::cli::complexity;
 
 #[derive(Parser)]
@@ -15,8 +14,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Analyze source code for smells.
-    Analyze,
     /// Report branch complexity per function, broken down by file.
     Complexity {
         /// Source file or directory to analyze (Swift, Rust, Kotlin, Java;
@@ -28,7 +25,6 @@ enum Command {
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
-        Command::Analyze => analyze::run(),
         Command::Complexity { path } => complexity::run(path),
     }
 }

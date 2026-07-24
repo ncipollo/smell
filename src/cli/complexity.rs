@@ -4,11 +4,10 @@ use std::process::ExitCode;
 use comfy_table::{Attribute, Cell, Table};
 
 use crate::code::{ComplexityRollup, FunctionComplexity};
-use crate::feature::complexity;
-use crate::feature::complexity::FileReport;
+use crate::{FileReport, analyze};
 
 pub fn run(path: PathBuf) -> ExitCode {
-    match complexity::analyze(&path) {
+    match analyze(&path) {
         Ok(reports) => {
             for report in &reports {
                 print_file(report);
