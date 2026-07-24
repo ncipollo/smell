@@ -1,6 +1,9 @@
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
+use crate::code::FileComplexity;
 use crate::code::FunctionComplexity;
+use crate::code::collector;
+use crate::code::collector::{LanguageRules, Visit};
 
 const BRANCH_KINDS: &[&str] = &[
     "if_statement",
@@ -16,46 +19,54 @@ const BRANCH_KINDS: &[&str] = &[
     "disjunction_expression",
 ];
 
-/// Parses Swift source and returns the branch complexity of each function.
-pub fn function_complexities(source: &str) -> Vec<FunctionComplexity> {
-    let mut parser = Parser::new();
-    parser
-        .set_language(&tree_sitter_swift::LANGUAGE.into())
-        .expect("failed to load swift grammar");
-    let Some(tree) = parser.parse(source, None) else {
-        return Vec::new();
-    };
+const TYPE_KINDS: &[&str] = &["class_declaration", "protocol_declaration"];
+
+/// Parses Swift source and returns the branch complexity of each function,
+/// grouped by containing type.
+pub fn file_complexity(source: &str) -> FileComplexity {
+    collector::file_complexity(&tree_sitter_swift::LANGUAGE.into(), &SwiftRules, source)
+}
+
+struct SwiftRules;
+
+impl LanguageRules for SwiftRules {
+    fn visit(&self, node: Node, source: &str) -> Visit {
+        match node.kind() {
+            kind if TYPE_KINDS.contains(&kind) => {
+                Visit::Type(collector::field_text(node, "name", source))
+            }
+            "function_declaration" => Visit::Functions(vec![FunctionComplexity {
+                name: collector::field_text(node, "name", source),
+                branches: collector::count_branches(node, source, self),
+            }]),
+            "property_declaration" => Visit::Functions(property_functions(node, source)),
+            _ => Visit::Skip,
+        }
+    }
+
+    fn is_branch(&self, node: Node, _source: &str) -> bool {
+        BRANCH_KINDS.contains(&node.kind())
+    }
+}
+
+fn property_functions(node: Node, source: &str) -> Vec<FunctionComplexity> {
+    let name = property_name(node, source);
     let mut functions = Vec::new();
-    collect_functions(tree.root_node(), source, &mut functions);
+    if let Some(computed) = node.child_by_field_name("computed_value") {
+        collect_computed_accessors(computed, source, &name, &mut functions);
+    }
+    if let Some(observers) = collector::find_child(node, "willset_didset_block") {
+        collect_observers(observers, source, &name, &mut functions);
+    }
     functions
 }
 
-fn collect_functions(node: Node, source: &str, functions: &mut Vec<FunctionComplexity>) {
-    match node.kind() {
-        "function_declaration" => functions.push(FunctionComplexity {
-            name: function_name(node, source),
-            branches: count_branches(node),
-        }),
-        "property_declaration" => collect_property(node, source, functions),
-        _ => {}
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions(child, source, functions);
-    }
-}
-
-fn collect_property(node: Node, source: &str, functions: &mut Vec<FunctionComplexity>) {
-    let name = property_name(node, source);
-    if let Some(computed) = node.child_by_field_name("computed_value") {
-        collect_computed_accessors(computed, &name, functions);
-    }
-    if let Some(observers) = find_child(node, "willset_didset_block") {
-        collect_observers(observers, &name, functions);
-    }
-}
-
-fn collect_computed_accessors(computed: Node, name: &str, functions: &mut Vec<FunctionComplexity>) {
+fn collect_computed_accessors(
+    computed: Node,
+    source: &str,
+    name: &str,
+    functions: &mut Vec<FunctionComplexity>,
+) {
     let mut cursor = computed.walk();
     let accessors: Vec<Node> = computed
         .children(&mut cursor)
@@ -64,7 +75,7 @@ fn collect_computed_accessors(computed: Node, name: &str, functions: &mut Vec<Fu
     if accessors.is_empty() {
         functions.push(FunctionComplexity {
             name: name.to_string(),
-            branches: count_branches(computed),
+            branches: collector::count_branches(computed, source, &SwiftRules),
         });
         return;
     }
@@ -76,12 +87,17 @@ fn collect_computed_accessors(computed: Node, name: &str, functions: &mut Vec<Fu
         };
         functions.push(FunctionComplexity {
             name: format!("{name}.{suffix}"),
-            branches: count_branches(accessor),
+            branches: collector::count_branches(accessor, source, &SwiftRules),
         });
     }
 }
 
-fn collect_observers(observers: Node, name: &str, functions: &mut Vec<FunctionComplexity>) {
+fn collect_observers(
+    observers: Node,
+    source: &str,
+    name: &str,
+    functions: &mut Vec<FunctionComplexity>,
+) {
     let mut cursor = observers.walk();
     for clause in observers.children(&mut cursor) {
         let suffix = match clause.kind() {
@@ -91,15 +107,9 @@ fn collect_observers(observers: Node, name: &str, functions: &mut Vec<FunctionCo
         };
         functions.push(FunctionComplexity {
             name: format!("{name}.{suffix}"),
-            branches: count_branches(clause),
+            branches: collector::count_branches(clause, source, &SwiftRules),
         });
     }
-}
-
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    let mut cursor = node.walk();
-    node.children(&mut cursor)
-        .find(|child| child.kind() == kind)
 }
 
 fn property_name(node: Node, source: &str) -> String {
@@ -110,125 +120,42 @@ fn property_name(node: Node, source: &str) -> String {
         .to_string()
 }
 
-fn function_name(node: Node, source: &str) -> String {
-    node.child_by_field_name("name")
-        .and_then(|name| name.utf8_text(source.as_bytes()).ok())
-        .unwrap_or("<unknown>")
-        .to_string()
-}
-
-fn count_branches(node: Node) -> usize {
-    let mut branches = 0;
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if BRANCH_KINDS.contains(&child.kind()) {
-            branches += 1;
-        }
-        branches += count_branches(child);
-    }
-    branches
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const SAMPLE: &str = r#"
-func simple() {
-    print("hi")
-}
-
-func branchy(x: Int) -> Int {
-    if x > 0 {
-        return 1
-    } else if x < -10 {
-        return -2
-    }
-    guard x != 0 else { return 0 }
-    for i in 0..<x {
-        while i > 2 {
-            break
-        }
-    }
-    repeat {
-        print("loop")
-    } while x > 5
-    switch x {
-    case 1:
-        return 1
-    case 2:
-        return 2
-    default:
-        break
-    }
-    let y = x > 3 ? 1 : 0
-    let optional: Int? = nil
-    let z = optional ?? y
-    if z > 1 && z < 100 || z == -5 {
-        return y
-    }
-    do {
-        try canThrow()
-    } catch {
-        return -1
-    }
-    return y
-}
-
-struct Shape {
-    var width = 0
-    var height = 0
-
-    var area: Int {
-        return width > 0 ? width * height : 0
-    }
-
-    var label: String {
-        get {
-            if area > 10 { return "big" }
-            return "small"
-        }
-        set {
-            guard !newValue.isEmpty else { return }
-            print(newValue)
-        }
-    }
-
-    var count: Int = 0 {
-        willSet {
-            if newValue > 10 { print("big") }
-        }
-        didSet {
-            guard count != oldValue else { return }
-            print("changed")
-        }
-    }
-}
-"#;
+    use crate::testing;
 
     #[test]
-    fn function_complexities_reports_each_function() {
-        let functions = function_complexities(SAMPLE);
-        let summary: Vec<(&str, usize)> = functions
-            .iter()
-            .map(|function| (function.name.as_str(), function.branches))
-            .collect();
+    fn file_complexity_reports_functions_grouped_by_type() {
+        let complexity = file_complexity(&testing::fixture("swift/complexity.swift"));
         assert_eq!(
-            summary,
+            testing::top_level_summary(&complexity),
             vec![
-                ("simple", 0),
-                ("branchy", 15),
-                ("area", 1),
-                ("label.get", 1),
-                ("label.set", 1),
-                ("count.willSet", 1),
-                ("count.didSet", 1),
+                ("canThrow".to_string(), 0),
+                ("simple".to_string(), 0),
+                ("branchy".to_string(), 15),
             ]
+        );
+        assert_eq!(
+            testing::type_summary(&complexity),
+            vec![(
+                "Shape".to_string(),
+                vec![
+                    ("area".to_string(), 1),
+                    ("label.get".to_string(), 1),
+                    ("label.set".to_string(), 1),
+                    ("count.willSet".to_string(), 1),
+                    ("count.didSet".to_string(), 1),
+                    ("describe".to_string(), 1),
+                ],
+            )]
         );
     }
 
     #[test]
-    fn function_complexities_handles_empty_source() {
-        assert!(function_complexities("").is_empty());
+    fn file_complexity_handles_empty_source() {
+        let complexity = file_complexity("");
+        assert!(complexity.functions.is_empty());
+        assert!(complexity.types.is_empty());
     }
 }

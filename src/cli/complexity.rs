@@ -1,16 +1,17 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use comfy_table::Table;
+use comfy_table::{Attribute, Cell, Table};
 
+use crate::code::{ComplexityRollup, FunctionComplexity};
 use crate::feature::complexity;
-use crate::feature::complexity::FileComplexity;
+use crate::feature::complexity::FileReport;
 
 pub fn run(path: PathBuf) -> ExitCode {
     match complexity::analyze(&path) {
-        Ok(files) => {
-            for file in &files {
-                print_file(file);
+        Ok(reports) => {
+            for report in &reports {
+                print_file(report);
             }
             ExitCode::SUCCESS
         }
@@ -21,12 +22,55 @@ pub fn run(path: PathBuf) -> ExitCode {
     }
 }
 
-fn print_file(file: &FileComplexity) {
-    println!("{}", file.path.display());
+fn print_file(report: &FileReport) {
+    println!("{}", report.path.display());
     let mut table = Table::new();
     table.set_header(["Function", "Complexity (branches)"]);
-    for function in &file.functions {
-        table.add_row([function.name.clone(), function.branches.to_string()]);
+    for complexity_type in &report.complexity.types {
+        add_group_rows(
+            &mut table,
+            &complexity_type.name,
+            &complexity_type.functions,
+            &complexity_type.rollup(),
+        );
     }
+    if !report.complexity.functions.is_empty() {
+        add_group_rows(
+            &mut table,
+            "(top-level)",
+            &report.complexity.functions,
+            &ComplexityRollup::of(&report.complexity.functions),
+        );
+    }
+    add_rollup_row(&mut table, "file", &report.complexity.rollup());
     println!("{table}\n");
+}
+
+fn add_group_rows(
+    table: &mut Table,
+    name: &str,
+    functions: &[FunctionComplexity],
+    rollup: &ComplexityRollup,
+) {
+    add_rollup_row(table, name, rollup);
+    for function in functions {
+        table.add_row([
+            format!("  {}", function.name),
+            function.branches.to_string(),
+        ]);
+    }
+}
+
+fn add_rollup_row(table: &mut Table, name: &str, rollup: &ComplexityRollup) {
+    table.add_row([
+        Cell::new(name).add_attribute(Attribute::Bold),
+        Cell::new(format_rollup(rollup)).add_attribute(Attribute::Bold),
+    ]);
+}
+
+fn format_rollup(rollup: &ComplexityRollup) -> String {
+    format!(
+        "total {} · max {} · avg {:.1}",
+        rollup.total_branches, rollup.max_branches, rollup.average_branches
+    )
 }

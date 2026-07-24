@@ -19,7 +19,8 @@ enum Command {
     Analyze,
     /// Report branch complexity per function, broken down by file.
     Complexity {
-        /// Swift file or directory to analyze (directories are searched recursively).
+        /// Source file or directory to analyze (Swift, Rust, Kotlin, Java;
+        /// directories are searched recursively).
         path: PathBuf,
     },
 }
