@@ -10,13 +10,13 @@ cargo install smell
 
 ## Usage
 
-Point `smell complexity` at a source file or a directory (searched recursively):
+Point `smell` at a source file or a directory (searched recursively):
 
 ```sh
-smell complexity src/main.rs           # a single Rust file
-smell complexity Sources/Shape.swift   # a single Swift file
-smell complexity app/src/main/kotlin   # a directory of Kotlin sources
-smell complexity src/main/java         # a directory of Java sources
+smell src/main.rs           # a single Rust file
+smell Sources/Shape.swift   # a single Swift file
+smell app/src/main/kotlin   # a directory of Kotlin sources
+smell src/main/java         # a directory of Java sources
 ```
 
 ## Example output
