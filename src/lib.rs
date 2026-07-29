@@ -11,6 +11,7 @@ mod testing;
 
 pub use feature::complexity::FileReport;
 pub use feature::complexity::options::AnalysisOptions;
+pub use feature::complexity::resolve::Overrides;
 
 use feature::complexity;
 
@@ -18,4 +19,10 @@ use feature::complexity;
 /// searched recursively) and reports cyclomatic complexity per function.
 pub fn analyze(path: &Path, options: &AnalysisOptions) -> io::Result<Vec<FileReport>> {
     complexity::analyze(path, options)
+}
+
+/// Resolves CLI flags against an optional `smell.toml` in `config_dir` into
+/// the options an analysis runs with.
+pub fn resolve_options(config_dir: &Path, overrides: &Overrides) -> io::Result<AnalysisOptions> {
+    complexity::resolve::resolve(config_dir, overrides)
 }

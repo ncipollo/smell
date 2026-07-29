@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
+use crate::Overrides;
 use crate::cli::complexity;
 use crate::cli::info;
 
@@ -27,18 +28,37 @@ struct Cli {
     #[arg(long, value_delimiter = ',')]
     branches: Vec<String>,
 
+    /// Use the named rule from smell.toml instead of the "default" rule.
+    #[arg(long, value_name = "NAME")]
+    rule: Option<String>,
+
     /// Print the branch-kind and glob vocabulary docs and exit.
     #[arg(long)]
     info: bool,
 }
 
 pub fn run() -> ExitCode {
-    let cli = Cli::parse();
-    if cli.info {
+    let Cli {
+        path,
+        include,
+        exclude,
+        branches,
+        rule,
+        info,
+    } = Cli::parse();
+    if info {
         return info::run();
     }
-    let path = cli.path.expect("clap enforces path unless --info");
-    complexity::run(path, cli.include, cli.exclude, cli.branches)
+    let path = path.expect("clap enforces path unless --info");
+    complexity::run(
+        path,
+        Overrides {
+            include,
+            exclude,
+            branches,
+            rule,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -92,5 +112,18 @@ mod tests {
         let cli = Cli::try_parse_from(["smell", "--info"]).expect("--info should parse");
         assert!(cli.info);
         assert_eq!(cli.path, None);
+    }
+
+    #[test]
+    fn parses_rule_name() {
+        let cli =
+            Cli::try_parse_from(["smell", "src", "--rule", "swift"]).expect("rule should parse");
+        assert_eq!(cli.rule, Some("swift".to_string()));
+    }
+
+    #[test]
+    fn rule_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.rule, None);
     }
 }

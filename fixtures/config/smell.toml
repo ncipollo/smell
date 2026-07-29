@@ -1,0 +1,7 @@
+[[rule]]
+include = ["*.rs"]
+
+[[rule]]
+name = "swift"
+include = ["*.swift"]
+branches = ["switch"]

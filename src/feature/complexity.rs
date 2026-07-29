@@ -7,8 +7,10 @@ use crate::code::branch::BranchFilter;
 use crate::feature::complexity::filter::FileFilter;
 use crate::feature::complexity::options::AnalysisOptions;
 
+pub mod config;
 pub mod filter;
 pub mod options;
+pub mod resolve;
 pub mod router;
 
 pub struct FileReport {
@@ -74,9 +76,10 @@ fn matches_relative(root: &Path, path: &Path, filter: &FileFilter) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::fixture_path;
 
     fn fixtures_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
+        fixture_path("")
     }
 
     fn include(patterns: &[&str]) -> AnalysisOptions {
