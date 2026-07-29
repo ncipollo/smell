@@ -18,6 +18,7 @@ include = [\"*.rs\"]
 exclude = [\"**/generated/**\"]
 branches = [\"switch\", \"boolean-operator\"]
 implements = [\"Labeled\"]
+max_complexity = 10
 ";
 
 /// Renders the full vocabulary documentation: friendly branch kinds, the
@@ -30,6 +31,7 @@ pub fn text() -> String {
         raw_section(),
         glob_section(),
         implements_section(),
+        limit_section(),
         config_section(),
     ];
     sections.join("\n")
@@ -114,6 +116,18 @@ fn implements_section() -> String {
     )
 }
 
+fn limit_section() -> String {
+    String::from(
+        "COMPLEXITY LIMIT\n\
+         --max-complexity <N> (or max_complexity in smell.toml) makes the run\n\
+         a check: it exits non-zero when any analyzed function's complexity\n\
+         is strictly greater than N (equal to N passes), printing the\n\
+         offending files and functions to stderr after the normal report.\n\
+         The check covers whatever the other filters selected. Without a\n\
+         limit, smell only reports and always exits zero on success.\n",
+    )
+}
+
 fn config_section() -> String {
     format!(
         "CONFIG FILE\n\
@@ -122,8 +136,9 @@ fn config_section() -> String {
          --rule <NAME> selects one; without it, the rule named \"default\" is\n\
          used if present, else the built-in defaults (a config file's mere\n\
          presence does not change a bare `smell <path>` invocation). Explicit\n\
-         --include/--exclude/--branches/--implements flags replace a rule's\n\
-         value for that field entirely rather than merging with it.\n\n{CONFIG_EXAMPLE}"
+         --include/--exclude/--branches/--implements/--max-complexity flags\n\
+         replace a rule's value for that field entirely rather than merging\n\
+         with it.\n\n{CONFIG_EXAMPLE}"
     )
 }
 
@@ -194,5 +209,12 @@ mod tests {
         let text = text();
         assert!(text.contains("--implements"));
         assert!(text.contains("`Comparable<String>` matches `Comparable`"));
+    }
+
+    #[test]
+    fn text_documents_max_complexity() {
+        let text = text();
+        assert!(text.contains("--max-complexity"));
+        assert!(text.contains("exits non-zero"));
     }
 }

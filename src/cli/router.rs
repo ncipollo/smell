@@ -33,6 +33,11 @@ struct Cli {
     #[arg(long, value_name = "NAME")]
     implements: Vec<String>,
 
+    /// Fail (exit non-zero) if any function's complexity exceeds this limit,
+    /// listing the offending files and functions (see --info).
+    #[arg(long, value_name = "N")]
+    max_complexity: Option<usize>,
+
     /// Use the named rule from smell.toml instead of the "default" rule.
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
@@ -49,6 +54,7 @@ pub fn run() -> ExitCode {
         exclude,
         branches,
         implements,
+        max_complexity,
         rule,
         info,
     } = Cli::parse();
@@ -63,6 +69,7 @@ pub fn run() -> ExitCode {
             exclude,
             branches,
             implements,
+            max_complexity,
             rule,
         },
     )
@@ -132,6 +139,19 @@ mod tests {
     fn implements_defaults_to_empty() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert!(cli.implements.is_empty());
+    }
+
+    #[test]
+    fn parses_max_complexity() {
+        let cli = Cli::try_parse_from(["smell", "src", "--max-complexity", "12"])
+            .expect("max complexity should parse");
+        assert_eq!(cli.max_complexity, Some(12));
+    }
+
+    #[test]
+    fn max_complexity_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.max_complexity, None);
     }
 
     #[test]

@@ -29,6 +29,8 @@ pub struct RuleConfig {
     pub branches: Vec<String>,
     #[serde(default)]
     pub implements: Vec<String>,
+    #[serde(default)]
+    pub max_complexity: Option<usize>,
 }
 
 fn default_rule_name() -> String {
@@ -43,6 +45,7 @@ impl Default for RuleConfig {
             exclude: Vec::new(),
             branches: Vec::new(),
             implements: Vec::new(),
+            max_complexity: None,
         }
     }
 }
@@ -108,6 +111,7 @@ mod tests {
         assert!(rule.exclude.is_empty());
         assert!(rule.branches.is_empty());
         assert!(rule.implements.is_empty());
+        assert_eq!(rule.max_complexity, None);
     }
 
     #[test]
@@ -117,7 +121,8 @@ mod tests {
                      include = [\"*.swift\"]\n\
                      exclude = [\"**/generated/**\"]\n\
                      branches = [\"switch\"]\n\
-                     implements = [\"Labeled\"]\n";
+                     implements = [\"Labeled\"]\n\
+                     max_complexity = 10\n";
         let config = parse(text, &path()).expect("valid config");
         let rule = &config.rules[0];
         assert_eq!(rule.name, "swift");
@@ -125,6 +130,7 @@ mod tests {
         assert_eq!(rule.exclude, vec!["**/generated/**"]);
         assert_eq!(rule.branches, vec!["switch"]);
         assert_eq!(rule.implements, vec!["Labeled"]);
+        assert_eq!(rule.max_complexity, Some(10));
     }
 
     #[test]

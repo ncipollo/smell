@@ -6,6 +6,7 @@ use crate::code::FileComplexity;
 use crate::feature::complexity::filter::{FileFilter, TypeFilter};
 use crate::feature::complexity::options::AnalysisOptions;
 
+pub mod check;
 pub mod config;
 pub mod filter;
 pub mod options;

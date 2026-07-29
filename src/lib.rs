@@ -10,6 +10,7 @@ pub mod feature;
 mod testing;
 
 pub use feature::complexity::FileReport;
+pub use feature::complexity::check::{CheckFailure, check};
 pub use feature::complexity::options::AnalysisOptions;
 pub use feature::complexity::resolve::Overrides;
 

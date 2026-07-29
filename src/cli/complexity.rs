@@ -6,7 +6,9 @@ use std::process::ExitCode;
 use comfy_table::{Attribute, Cell, Table};
 
 use crate::code::{ComplexityRollup, FunctionComplexity};
-use crate::{AnalysisOptions, FileReport, Overrides, analyze, resolve_options};
+use crate::{
+    AnalysisOptions, CheckFailure, FileReport, Overrides, analyze, check, resolve_options,
+};
 
 pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
     let options = match options(&overrides) {
@@ -21,13 +23,41 @@ pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
             for report in &reports {
                 print_file(report);
             }
-            ExitCode::SUCCESS
+            enforce_limit(&reports, options.max_complexity)
         }
         Err(error) => {
             eprintln!("error: {}: {error}", path.display());
             ExitCode::FAILURE
         }
     }
+}
+
+/// Applies the complexity limit check, reporting any failures on stderr.
+fn enforce_limit(reports: &[FileReport], limit: Option<usize>) -> ExitCode {
+    let Some(limit) = limit else {
+        return ExitCode::SUCCESS;
+    };
+    let failures = check(reports, limit);
+    if failures.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+    eprint!("{}", format_failures(&failures, limit));
+    ExitCode::FAILURE
+}
+
+fn format_failures(failures: &[CheckFailure], limit: usize) -> String {
+    let mut text = String::new();
+    for failure in failures {
+        text.push_str(&format!("{}\n", failure.path.display()));
+        for function in &failure.functions {
+            text.push_str(&format!("  {}  {}\n", function.name, function.complexity));
+        }
+    }
+    text.push_str(&format!(
+        "{} file(s) exceed complexity limit {limit}\n",
+        failures.len()
+    ));
+    text
 }
 
 fn options(overrides: &Overrides) -> io::Result<AnalysisOptions> {
@@ -86,4 +116,34 @@ fn format_rollup(rollup: &ComplexityRollup) -> String {
         "total {} · max {} · avg {:.1}",
         rollup.total, rollup.max, rollup.average
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::feature::complexity::check::FailedFunction;
+
+    #[test]
+    fn format_failures_lists_files_functions_and_summary() {
+        let failures = vec![
+            CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                functions: vec![FailedFunction {
+                    name: "Shape.area".to_string(),
+                    complexity: 12,
+                }],
+            },
+            CheckFailure {
+                path: PathBuf::from("src/b.rs"),
+                functions: vec![FailedFunction {
+                    name: "top".to_string(),
+                    complexity: 11,
+                }],
+            },
+        ];
+        assert_eq!(
+            format_failures(&failures, 10),
+            "src/a.rs\n  Shape.area  12\nsrc/b.rs\n  top  11\n2 file(s) exceed complexity limit 10\n"
+        );
+    }
 }
