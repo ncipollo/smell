@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::code::FileComplexity;
+use crate::code::branch::BranchFilter;
 use crate::code::{java, kotlin, rust, swift};
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["java", "kt", "kts", "rs", "swift"];
@@ -11,12 +12,12 @@ pub fn is_supported(path: &Path) -> bool {
 
 /// Routes the source to the language parser matching the file extension.
 /// Returns `None` for unsupported file types.
-pub fn file_complexity(path: &Path, source: &str) -> Option<FileComplexity> {
+pub fn file_complexity(path: &Path, source: &str, filter: &BranchFilter) -> Option<FileComplexity> {
     match extension(path)?.as_str() {
-        "java" => Some(java::file_complexity(source)),
-        "kt" | "kts" => Some(kotlin::file_complexity(source)),
-        "rs" => Some(rust::file_complexity(source)),
-        "swift" => Some(swift::file_complexity(source)),
+        "java" => Some(java::file_complexity(source, filter)),
+        "kt" | "kts" => Some(kotlin::file_complexity(source, filter)),
+        "rs" => Some(rust::file_complexity(source, filter)),
+        "swift" => Some(swift::file_complexity(source, filter)),
         _ => None,
     }
 }
@@ -48,13 +49,17 @@ mod tests {
 
     #[test]
     fn file_complexity_routes_swift() {
-        let complexity =
-            file_complexity(Path::new("file.swift"), "func simple() {}").expect("swift routed");
+        let complexity = file_complexity(
+            Path::new("file.swift"),
+            "func simple() {}",
+            &BranchFilter::default(),
+        )
+        .expect("swift routed");
         assert_eq!(complexity.functions.len(), 1);
     }
 
     #[test]
     fn file_complexity_rejects_unsupported_extension() {
-        assert!(file_complexity(Path::new("notes.md"), "").is_none());
+        assert!(file_complexity(Path::new("notes.md"), "", &BranchFilter::default()).is_none());
     }
 }

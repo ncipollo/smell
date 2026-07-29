@@ -1,6 +1,7 @@
 //! Code layer. Interaction with tree-sitter libraries, with parser setup
 //! organized by language type.
 
+pub mod branch;
 mod collector;
 pub mod java;
 pub mod kotlin;

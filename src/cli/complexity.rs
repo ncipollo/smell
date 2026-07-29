@@ -1,13 +1,28 @@
+use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use comfy_table::{Attribute, Cell, Table};
 
+use crate::code::branch::{BranchFilter, BranchSpec};
 use crate::code::{ComplexityRollup, FunctionComplexity};
-use crate::{FileReport, analyze};
+use crate::feature::complexity::filter::FileFilter;
+use crate::{AnalysisOptions, FileReport, analyze};
 
-pub fn run(path: PathBuf) -> ExitCode {
-    match analyze(&path) {
+pub fn run(
+    path: PathBuf,
+    include: Vec<String>,
+    exclude: Vec<String>,
+    branches: Vec<String>,
+) -> ExitCode {
+    let options = match build_options(&include, &exclude, &branches) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match analyze(&path, &options) {
         Ok(reports) => {
             for report in &reports {
                 print_file(report);
@@ -19,6 +34,21 @@ pub fn run(path: PathBuf) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn build_options(
+    include: &[String],
+    exclude: &[String],
+    branches: &[String],
+) -> io::Result<AnalysisOptions> {
+    let specs: Vec<BranchSpec> = branches
+        .iter()
+        .map(|branch| BranchSpec::parse(branch))
+        .collect();
+    Ok(AnalysisOptions {
+        files: FileFilter::new(include, exclude)?,
+        branches: BranchFilter::from_specs(&specs),
+    })
 }
 
 fn print_file(report: &FileReport) {
