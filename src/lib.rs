@@ -10,11 +10,12 @@ pub mod feature;
 mod testing;
 
 pub use feature::complexity::FileReport;
+pub use feature::complexity::options::AnalysisOptions;
 
 use feature::complexity;
 
 /// Analyzes the source files at the given path (a single file or a directory
 /// searched recursively) and reports cyclomatic complexity per function.
-pub fn analyze(path: &Path) -> io::Result<Vec<FileReport>> {
-    complexity::analyze(path)
+pub fn analyze(path: &Path, options: &AnalysisOptions) -> io::Result<Vec<FileReport>> {
+    complexity::analyze(path, options)
 }

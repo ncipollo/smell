@@ -1,78 +1,91 @@
 use tree_sitter::Node;
 
 use crate::code::FileComplexity;
-use crate::code::FunctionComplexity;
+use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
 use crate::code::collector;
-use crate::code::collector::{LanguageRules, Visit};
+use crate::code::collector::{FunctionDecl, LanguageRules, Visit};
 
-const BRANCH_KINDS: &[&str] = &[
-    "if_expression",
-    "when_entry",
-    "for_statement",
-    "while_statement",
-    "do_while_statement",
-    "catch_block",
+pub const BRANCH_RULES: &[BranchRule] = &[
+    BranchRule::new(BranchKind::If, "if_expression"),
+    BranchRule::new(BranchKind::Switch, "when_entry"),
+    BranchRule::new(BranchKind::Loop, "for_statement"),
+    BranchRule::new(BranchKind::Loop, "while_statement"),
+    BranchRule::new(BranchKind::Loop, "do_while_statement"),
+    BranchRule::new(BranchKind::Catch, "catch_block"),
+    BranchRule::when(
+        BranchKind::BooleanOperator,
+        "binary_expression",
+        "operator is && or ||",
+        is_boolean_operator,
+    ),
+    BranchRule::when(
+        BranchKind::NullCoalescing,
+        "binary_expression",
+        "operator is the elvis operator ?:",
+        is_elvis_operator,
+    ),
 ];
 
 /// Parses Kotlin source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
-pub fn file_complexity(source: &str) -> FileComplexity {
+pub fn file_complexity(source: &str, filter: &BranchFilter) -> FileComplexity {
     collector::file_complexity(
         &tree_sitter_kotlin_ng::LANGUAGE.into(),
         &KotlinRules,
         source,
+        filter,
     )
 }
 
 struct KotlinRules;
 
 impl LanguageRules for KotlinRules {
-    fn visit(&self, node: Node, source: &str) -> Visit {
+    fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a> {
         match node.kind() {
             "class_declaration" | "object_declaration" => {
                 Visit::Type(collector::field_text(node, "name", source))
             }
             "companion_object" => Visit::Type(companion_name(node, source)),
             "function_declaration" => Visit::Functions(vec![named_function(node, source)]),
-            "secondary_constructor" => {
-                Visit::Functions(vec![function(node, source, "constructor")])
-            }
-            "anonymous_initializer" => Visit::Functions(vec![function(node, source, "init")]),
+            "secondary_constructor" => Visit::Functions(vec![function(node, "constructor")]),
+            "anonymous_initializer" => Visit::Functions(vec![function(node, "init")]),
             "getter" => Visit::Functions(vec![accessor(node, source, "get")]),
             "setter" => Visit::Functions(vec![accessor(node, source, "set")]),
             _ => Visit::Skip,
         }
     }
 
-    fn is_branch(&self, node: Node, _source: &str) -> bool {
-        match node.kind() {
-            "binary_expression" => is_branch_operator(node),
-            kind => BRANCH_KINDS.contains(&kind),
-        }
+    fn branch_rules(&self) -> &'static [BranchRule] {
+        BRANCH_RULES
     }
 }
 
-/// Boolean operators and elvis (`?:`) each add a branch.
-fn is_branch_operator(node: Node) -> bool {
+fn is_boolean_operator(node: Node, _source: &str) -> bool {
     node.child_by_field_name("operator")
-        .is_some_and(|operator| matches!(operator.kind(), "&&" | "||" | "?:"))
+        .is_some_and(|operator| matches!(operator.kind(), "&&" | "||"))
 }
 
-fn named_function(node: Node, source: &str) -> FunctionComplexity {
-    function(node, source, &collector::field_text(node, "name", source))
+/// The elvis operator (`?:`) branches on null.
+fn is_elvis_operator(node: Node, _source: &str) -> bool {
+    node.child_by_field_name("operator")
+        .is_some_and(|operator| operator.kind() == "?:")
 }
 
-fn function(node: Node, source: &str, name: &str) -> FunctionComplexity {
-    FunctionComplexity {
+fn named_function<'a>(node: Node<'a>, source: &str) -> FunctionDecl<'a> {
+    function(node, &collector::field_text(node, "name", source))
+}
+
+fn function<'a>(node: Node<'a>, name: &str) -> FunctionDecl<'a> {
+    FunctionDecl {
         name: name.to_string(),
-        complexity: collector::complexity(node, source, &KotlinRules),
+        body: node,
     }
 }
 
 /// Accessors are named after the property they belong to, e.g. `label.get`.
-fn accessor(node: Node, source: &str, suffix: &str) -> FunctionComplexity {
+fn accessor<'a>(node: Node<'a>, source: &str, suffix: &str) -> FunctionDecl<'a> {
     let property = property_name(node, source);
-    function(node, source, &format!("{property}.{suffix}"))
+    function(node, &format!("{property}.{suffix}"))
 }
 
 fn property_name(node: Node, source: &str) -> String {
@@ -107,11 +120,15 @@ fn companion_name(node: Node, source: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::code::branch::BranchSpec;
     use crate::testing;
 
     #[test]
     fn file_complexity_reports_functions_grouped_by_type() {
-        let complexity = file_complexity(&testing::fixture("kotlin/complexity.kt"));
+        let complexity = file_complexity(
+            &testing::fixture("kotlin/complexity.kt"),
+            &BranchFilter::default(),
+        );
         assert_eq!(
             testing::top_level_summary(&complexity),
             vec![
@@ -142,8 +159,38 @@ mod tests {
     }
 
     #[test]
+    fn file_complexity_counts_only_selected_kinds() {
+        let filter = BranchFilter::from_specs(&[BranchSpec::Kind(BranchKind::Switch)]);
+        let complexity = file_complexity(&testing::fixture("kotlin/complexity.kt"), &filter);
+        // branchy: three when entries (1, 2, else).
+        assert_eq!(
+            testing::top_level_summary(&complexity),
+            vec![
+                ("simple".to_string(), 1),
+                ("branchy".to_string(), 4),
+                ("canThrow".to_string(), 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn file_complexity_counts_raw_node_kinds_literally() {
+        let filter = BranchFilter::from_specs(&[BranchSpec::Raw("catch_block".to_string())]);
+        let complexity = file_complexity(&testing::fixture("kotlin/complexity.kt"), &filter);
+        // branchy: one catch block.
+        assert_eq!(
+            testing::top_level_summary(&complexity),
+            vec![
+                ("simple".to_string(), 1),
+                ("branchy".to_string(), 2),
+                ("canThrow".to_string(), 1),
+            ]
+        );
+    }
+
+    #[test]
     fn file_complexity_handles_empty_source() {
-        let complexity = file_complexity("");
+        let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
     }

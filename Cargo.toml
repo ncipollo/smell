@@ -10,6 +10,7 @@ version = "0.1.0"
 [dependencies]
 clap = { version = "4.6.4", features = ["derive"] }
 comfy-table = "7.2.2"
+globset = "0.4.19"
 tree-sitter = "0.26.11"
 tree-sitter-java = "0.23.5"
 tree-sitter-kotlin-ng = "1.1.0"

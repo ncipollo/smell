@@ -1,20 +1,26 @@
 use tree_sitter::Node;
 
 use crate::code::FileComplexity;
-use crate::code::FunctionComplexity;
+use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
 use crate::code::collector;
-use crate::code::collector::{LanguageRules, Visit};
+use crate::code::collector::{FunctionDecl, LanguageRules, Visit};
 
-const BRANCH_KINDS: &[&str] = &[
-    "if_statement",
-    "for_statement",
-    "enhanced_for_statement",
-    "while_statement",
-    "do_statement",
-    "switch_block_statement_group",
-    "switch_rule",
-    "catch_clause",
-    "ternary_expression",
+pub const BRANCH_RULES: &[BranchRule] = &[
+    BranchRule::new(BranchKind::If, "if_statement"),
+    BranchRule::new(BranchKind::Switch, "switch_block_statement_group"),
+    BranchRule::new(BranchKind::Switch, "switch_rule"),
+    BranchRule::new(BranchKind::Loop, "for_statement"),
+    BranchRule::new(BranchKind::Loop, "enhanced_for_statement"),
+    BranchRule::new(BranchKind::Loop, "while_statement"),
+    BranchRule::new(BranchKind::Loop, "do_statement"),
+    BranchRule::new(BranchKind::Catch, "catch_clause"),
+    BranchRule::new(BranchKind::Ternary, "ternary_expression"),
+    BranchRule::when(
+        BranchKind::BooleanOperator,
+        "binary_expression",
+        "operator is && or ||",
+        is_boolean_operator,
+    ),
 ];
 
 const TYPE_KINDS: &[&str] = &[
@@ -33,35 +39,37 @@ const FUNCTION_KINDS: &[&str] = &[
 
 /// Parses Java source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
-pub fn file_complexity(source: &str) -> FileComplexity {
-    collector::file_complexity(&tree_sitter_java::LANGUAGE.into(), &JavaRules, source)
+pub fn file_complexity(source: &str, filter: &BranchFilter) -> FileComplexity {
+    collector::file_complexity(
+        &tree_sitter_java::LANGUAGE.into(),
+        &JavaRules,
+        source,
+        filter,
+    )
 }
 
 struct JavaRules;
 
 impl LanguageRules for JavaRules {
-    fn visit(&self, node: Node, source: &str) -> Visit {
+    fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a> {
         match node.kind() {
             kind if TYPE_KINDS.contains(&kind) => {
                 Visit::Type(collector::field_text(node, "name", source))
             }
-            kind if FUNCTION_KINDS.contains(&kind) => Visit::Functions(vec![FunctionComplexity {
+            kind if FUNCTION_KINDS.contains(&kind) => Visit::Functions(vec![FunctionDecl {
                 name: collector::field_text(node, "name", source),
-                complexity: collector::complexity(node, source, self),
+                body: node,
             }]),
             _ => Visit::Skip,
         }
     }
 
-    fn is_branch(&self, node: Node, _source: &str) -> bool {
-        match node.kind() {
-            "binary_expression" => is_boolean_operator(node),
-            kind => BRANCH_KINDS.contains(&kind),
-        }
+    fn branch_rules(&self) -> &'static [BranchRule] {
+        BRANCH_RULES
     }
 }
 
-fn is_boolean_operator(node: Node) -> bool {
+fn is_boolean_operator(node: Node, _source: &str) -> bool {
     node.child_by_field_name("operator")
         .is_some_and(|operator| matches!(operator.kind(), "&&" | "||"))
 }
@@ -69,11 +77,15 @@ fn is_boolean_operator(node: Node) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::code::branch::BranchSpec;
     use crate::testing;
 
     #[test]
     fn file_complexity_reports_functions_grouped_by_type() {
-        let complexity = file_complexity(&testing::fixture("java/Complexity.java"));
+        let complexity = file_complexity(
+            &testing::fixture("java/Complexity.java"),
+            &BranchFilter::default(),
+        );
         assert!(complexity.functions.is_empty());
         assert_eq!(
             testing::type_summary(&complexity),
@@ -94,8 +106,44 @@ mod tests {
     }
 
     #[test]
+    fn file_complexity_counts_only_selected_kinds() {
+        let filter = BranchFilter::from_specs(&[BranchSpec::Kind(BranchKind::Switch)]);
+        let complexity = file_complexity(&testing::fixture("java/Complexity.java"), &filter);
+        // branchy: three classic switch groups plus two arrow switch rules.
+        assert_eq!(
+            testing::type_summary(&complexity)[0],
+            (
+                "Complexity".to_string(),
+                vec![
+                    ("Complexity".to_string(), 1),
+                    ("branchy".to_string(), 6),
+                    ("canThrow".to_string(), 1),
+                ],
+            )
+        );
+    }
+
+    #[test]
+    fn file_complexity_counts_raw_node_kinds_literally() {
+        let filter = BranchFilter::from_specs(&[BranchSpec::Raw("ternary_expression".to_string())]);
+        let complexity = file_complexity(&testing::fixture("java/Complexity.java"), &filter);
+        // branchy: one ternary expression.
+        assert_eq!(
+            testing::type_summary(&complexity)[0],
+            (
+                "Complexity".to_string(),
+                vec![
+                    ("Complexity".to_string(), 1),
+                    ("branchy".to_string(), 2),
+                    ("canThrow".to_string(), 1),
+                ],
+            )
+        );
+    }
+
+    #[test]
     fn file_complexity_handles_empty_source() {
-        let complexity = file_complexity("");
+        let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
     }
