@@ -11,6 +11,14 @@ const LANGUAGES: &[(&str, &[BranchRule])] = &[
     ("Swift", swift::BRANCH_RULES),
 ];
 
+const CONFIG_EXAMPLE: &str = "\
+[[rule]]
+name = \"default\"
+include = [\"*.rs\"]
+exclude = [\"**/generated/**\"]
+branches = [\"switch\", \"boolean-operator\"]
+";
+
 /// Renders the full vocabulary documentation: friendly branch kinds, the
 /// per-language node kinds behind them, raw escape-hatch semantics, and glob
 /// filtering rules. Written to assist AI agents composing smell commands.
@@ -20,6 +28,7 @@ pub fn text() -> String {
         language_sections(),
         raw_section(),
         glob_section(),
+        config_section(),
     ];
     sections.join("\n")
 }
@@ -85,9 +94,23 @@ fn glob_section() -> String {
     )
 }
 
+fn config_section() -> String {
+    format!(
+        "CONFIG FILE\n\
+         An optional smell.toml in the directory smell is invoked from (not\n\
+         necessarily the analyzed path) declares named [[rule]] entries.\n\
+         --rule <NAME> selects one; without it, the rule named \"default\" is\n\
+         used if present, else the built-in defaults (a config file's mere\n\
+         presence does not change a bare `smell <path>` invocation). Explicit\n\
+         --include/--exclude/--branches flags replace a rule's value for that\n\
+         field entirely rather than merging with it.\n\n{CONFIG_EXAMPLE}"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::feature::complexity::config::Config;
 
     #[test]
     fn text_documents_every_branch_kind() {
@@ -121,5 +144,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn config_example_deserializes() {
+        let config: Config = toml::from_str(CONFIG_EXAMPLE).expect("example is valid config");
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].name, "default");
+    }
+
+    #[test]
+    fn config_example_cites_real_branch_kinds() {
+        let config: Config = toml::from_str(CONFIG_EXAMPLE).expect("example is valid config");
+        for branch in &config.rules[0].branches {
+            assert!(
+                BranchKind::from_name(branch).is_some(),
+                "not a branch kind: {branch}"
+            );
+        }
+    }
+
+    #[test]
+    fn text_includes_the_config_example() {
+        assert!(text().contains(CONFIG_EXAMPLE));
     }
 }

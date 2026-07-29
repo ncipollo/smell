@@ -1,21 +1,15 @@
+use std::env;
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use comfy_table::{Attribute, Cell, Table};
 
-use crate::code::branch::{BranchFilter, BranchSpec};
 use crate::code::{ComplexityRollup, FunctionComplexity};
-use crate::feature::complexity::filter::FileFilter;
-use crate::{AnalysisOptions, FileReport, analyze};
+use crate::{AnalysisOptions, FileReport, Overrides, analyze, resolve_options};
 
-pub fn run(
-    path: PathBuf,
-    include: Vec<String>,
-    exclude: Vec<String>,
-    branches: Vec<String>,
-) -> ExitCode {
-    let options = match build_options(&include, &exclude, &branches) {
+pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
+    let options = match options(&overrides) {
         Ok(options) => options,
         Err(error) => {
             eprintln!("error: {error}");
@@ -36,19 +30,9 @@ pub fn run(
     }
 }
 
-fn build_options(
-    include: &[String],
-    exclude: &[String],
-    branches: &[String],
-) -> io::Result<AnalysisOptions> {
-    let specs: Vec<BranchSpec> = branches
-        .iter()
-        .map(|branch| BranchSpec::parse(branch))
-        .collect();
-    Ok(AnalysisOptions {
-        files: FileFilter::new(include, exclude)?,
-        branches: BranchFilter::from_specs(&specs),
-    })
+fn options(overrides: &Overrides) -> io::Result<AnalysisOptions> {
+    let dir = env::current_dir()?;
+    resolve_options(&dir, overrides)
 }
 
 fn print_file(report: &FileReport) {

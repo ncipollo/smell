@@ -5,12 +5,18 @@ use std::path::PathBuf;
 
 use crate::code::FileComplexity;
 
+/// Resolves a path under the `fixtures` directory, e.g.
+/// `fixture_path("swift/complexity.swift")` or `fixture_path("config")`.
+pub fn fixture_path(relative_path: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join(relative_path)
+}
+
 /// Loads a source file from the `fixtures` directory (organized by language),
 /// e.g. `fixture("swift/complexity.swift")`.
 pub fn fixture(relative_path: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(relative_path);
+    let path = fixture_path(relative_path);
     fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("failed to read fixture {}: {error}", path.display()))
 }
