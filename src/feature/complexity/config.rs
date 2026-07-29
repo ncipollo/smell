@@ -13,12 +13,12 @@ pub const DEFAULT_RULE: &str = "default";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default, rename = "rule")]
-    pub rules: Vec<Rule>,
+    pub rules: Vec<RuleConfig>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Rule {
+pub struct RuleConfig {
     #[serde(default = "default_rule_name")]
     pub name: String,
     #[serde(default)]
@@ -33,9 +33,9 @@ fn default_rule_name() -> String {
     DEFAULT_RULE.to_string()
 }
 
-impl Default for Rule {
-    fn default() -> Rule {
-        Rule {
+impl Default for RuleConfig {
+    fn default() -> RuleConfig {
+        RuleConfig {
             name: default_rule_name(),
             include: Vec::new(),
             exclude: Vec::new(),

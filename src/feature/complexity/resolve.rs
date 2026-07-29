@@ -4,7 +4,7 @@ use std::io;
 use std::path::Path;
 
 use crate::code::branch::{BranchFilter, BranchSpec};
-use crate::feature::complexity::config::{self, Config, DEFAULT_RULE, Rule};
+use crate::feature::complexity::config::{self, Config, DEFAULT_RULE, RuleConfig};
 use crate::feature::complexity::filter::FileFilter;
 use crate::feature::complexity::options::AnalysisOptions;
 
@@ -46,9 +46,13 @@ fn selected<'a>(flag: &'a [String], rule: &'a [String]) -> &'a [String] {
     if flag.is_empty() { rule } else { flag }
 }
 
-fn select_rule(config: Option<Config>, requested: Option<&str>, dir: &Path) -> io::Result<Rule> {
+fn select_rule(
+    config: Option<Config>,
+    requested: Option<&str>,
+    dir: &Path,
+) -> io::Result<RuleConfig> {
     match (config, requested) {
-        (None, None) => Ok(Rule::default()),
+        (None, None) => Ok(RuleConfig::default()),
         (None, Some(name)) => Err(no_config_error(dir, name)),
         (Some(config), None) => Ok(take_rule(config, DEFAULT_RULE).unwrap_or_default()),
         (Some(config), Some(name)) => {
@@ -58,7 +62,7 @@ fn select_rule(config: Option<Config>, requested: Option<&str>, dir: &Path) -> i
     }
 }
 
-fn take_rule(config: Config, name: &str) -> Option<Rule> {
+fn take_rule(config: Config, name: &str) -> Option<RuleConfig> {
     config.rules.into_iter().find(|rule| rule.name == name)
 }
 
