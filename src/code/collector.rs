@@ -20,12 +20,30 @@ pub struct FunctionDecl<'a> {
     pub body: Node<'a>,
 }
 
+/// A type declaration a language identified during the walk.
+pub struct TypeDecl {
+    pub name: String,
+    /// Raw source text of the supertypes named at this declaration site
+    /// (extends/implements/conformance clauses, an impl's trait).
+    pub supertypes: Vec<String>,
+}
+
+impl TypeDecl {
+    /// A declaration that names no supertypes at this site.
+    pub fn plain(name: String) -> TypeDecl {
+        TypeDecl {
+            name,
+            supertypes: Vec::new(),
+        }
+    }
+}
+
 /// What a language makes of a single syntax node.
 pub enum Visit<'a> {
     /// Nothing at this node; keep descending.
     Skip,
     /// The node opens a type scope (class/struct/enum/...) for its subtree.
-    Type(String),
+    Type(TypeDecl),
     /// Functions produced at this node (one for plain functions, several for
     /// property accessors).
     Functions(Vec<FunctionDecl<'a>>),
@@ -62,6 +80,10 @@ pub fn file_complexity(
         &mut Vec::new(),
         &mut file,
     );
+    // Types are upserted when their declarations are visited so that split
+    // declarations can contribute supertypes; only types that ended up with
+    // functions are reported.
+    file.types.retain(|t| !t.functions.is_empty());
     file
 }
 
@@ -118,6 +140,13 @@ pub fn field_text(node: Node, field: &str, source: &str) -> String {
         .to_string()
 }
 
+/// Extracts a node's own source text.
+pub fn node_text(node: Node, source: &str) -> String {
+    node.utf8_text(source.as_bytes())
+        .unwrap_or("<unknown>")
+        .to_string()
+}
+
 fn collect(
     node: Node,
     source: &str,
@@ -128,8 +157,10 @@ fn collect(
 ) {
     let opened_type = match rules.visit(node, source) {
         Visit::Skip => false,
-        Visit::Type(name) => {
-            type_stack.push(qualified_name(type_stack, &name));
+        Visit::Type(decl) => {
+            let qualified = qualified_name(type_stack, &decl.name);
+            add_supertypes(find_or_create_type(file, &qualified), decl.supertypes);
+            type_stack.push(qualified);
             true
         }
         Visit::Functions(decls) => {
@@ -179,17 +210,32 @@ fn attach_functions(
         file.functions.extend(functions);
         return;
     };
-    // Find-or-create by name so split declarations (Rust impl blocks, Swift
-    // extensions) merge into a single type.
-    let complexity = match file.types.iter_mut().find(|t| &t.name == type_name) {
-        Some(existing) => existing,
+    find_or_create_type(file, type_name)
+        .functions
+        .extend(functions);
+}
+
+/// Finds a type by qualified name, creating it if absent, so split
+/// declarations (Rust impl blocks, Swift extensions) merge into a single type.
+fn find_or_create_type<'f>(file: &'f mut FileComplexity, name: &str) -> &'f mut TypeComplexity {
+    match file.types.iter_mut().position(|t| t.name == name) {
+        Some(index) => &mut file.types[index],
         None => {
             file.types.push(TypeComplexity {
-                name: type_name.clone(),
+                name: name.to_string(),
+                supertypes: Vec::new(),
                 functions: Vec::new(),
             });
             file.types.last_mut().expect("just pushed a type")
         }
-    };
-    complexity.functions.extend(functions);
+    }
+}
+
+/// Unions supertypes from one declaration site into the merged type.
+fn add_supertypes(complexity: &mut TypeComplexity, supertypes: Vec<String>) {
+    for supertype in supertypes {
+        if !complexity.supertypes.contains(&supertype) {
+            complexity.supertypes.push(supertype);
+        }
+    }
 }

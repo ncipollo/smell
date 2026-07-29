@@ -27,6 +27,8 @@ pub struct RuleConfig {
     pub exclude: Vec<String>,
     #[serde(default)]
     pub branches: Vec<String>,
+    #[serde(default)]
+    pub implements: Vec<String>,
 }
 
 fn default_rule_name() -> String {
@@ -40,6 +42,7 @@ impl Default for RuleConfig {
             include: Vec::new(),
             exclude: Vec::new(),
             branches: Vec::new(),
+            implements: Vec::new(),
         }
     }
 }
@@ -104,6 +107,7 @@ mod tests {
         assert!(rule.include.is_empty());
         assert!(rule.exclude.is_empty());
         assert!(rule.branches.is_empty());
+        assert!(rule.implements.is_empty());
     }
 
     #[test]
@@ -112,13 +116,15 @@ mod tests {
                      name = \"swift\"\n\
                      include = [\"*.swift\"]\n\
                      exclude = [\"**/generated/**\"]\n\
-                     branches = [\"switch\"]\n";
+                     branches = [\"switch\"]\n\
+                     implements = [\"Labeled\"]\n";
         let config = parse(text, &path()).expect("valid config");
         let rule = &config.rules[0];
         assert_eq!(rule.name, "swift");
         assert_eq!(rule.include, vec!["*.swift"]);
         assert_eq!(rule.exclude, vec!["**/generated/**"]);
         assert_eq!(rule.branches, vec!["switch"]);
+        assert_eq!(rule.implements, vec!["Labeled"]);
     }
 
     #[test]

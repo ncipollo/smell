@@ -30,6 +30,20 @@ pub fn top_level_summary(complexity: &FileComplexity) -> Vec<(String, usize)> {
         .collect()
 }
 
+/// Summarizes each type as `(name, [supertypes])` for assertions.
+pub fn supertype_summary(complexity: &FileComplexity) -> Vec<(String, Vec<String>)> {
+    complexity
+        .types
+        .iter()
+        .map(|complexity_type| {
+            (
+                complexity_type.name.clone(),
+                complexity_type.supertypes.clone(),
+            )
+        })
+        .collect()
+}
+
 /// Summarizes each type as `(name, [(function, complexity)])` for assertions.
 pub fn type_summary(complexity: &FileComplexity) -> Vec<(String, Vec<(String, usize)>)> {
     complexity

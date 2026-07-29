@@ -3,8 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::code::FileComplexity;
-use crate::code::branch::BranchFilter;
-use crate::feature::complexity::filter::FileFilter;
+use crate::feature::complexity::filter::{FileFilter, TypeFilter};
 use crate::feature::complexity::options::AnalysisOptions;
 
 pub mod config;
@@ -23,21 +22,44 @@ pub struct FileReport {
 pub fn analyze(path: &Path, options: &AnalysisOptions) -> io::Result<Vec<FileReport>> {
     let mut files = source_files(path, &options.files)?;
     files.sort();
-    files
-        .into_iter()
-        .map(|file| analyze_file(file, &options.branches))
-        .collect()
+    let mut reports = Vec::new();
+    for file in files {
+        if let Some(report) = analyze_file(file, options)? {
+            reports.push(report);
+        }
+    }
+    Ok(reports)
 }
 
-fn analyze_file(path: PathBuf, branches: &BranchFilter) -> io::Result<FileReport> {
+/// Analyzes one file; `None` when the type filter leaves nothing to report.
+fn analyze_file(path: PathBuf, options: &AnalysisOptions) -> io::Result<Option<FileReport>> {
     let source = fs::read_to_string(&path)?;
-    let Some(complexity) = router::file_complexity(&path, &source, branches) else {
+    let Some(complexity) = router::file_complexity(&path, &source, &options.branches) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("unsupported file type: {}", path.display()),
         ));
     };
-    Ok(FileReport { path, complexity })
+    Ok(filter_types(complexity, &options.types).map(|complexity| FileReport { path, complexity }))
+}
+
+/// Retains only types whose supertypes match the filter. Top-level functions
+/// implement nothing, so any selection drops them; a file left with no types
+/// drops out of the report entirely.
+fn filter_types(complexity: FileComplexity, filter: &TypeFilter) -> Option<FileComplexity> {
+    if filter.is_empty() {
+        return Some(complexity);
+    }
+    let mut complexity = complexity;
+    complexity.functions.clear();
+    complexity
+        .types
+        .retain(|complexity_type| filter.matches(&complexity_type.supertypes));
+    if complexity.types.is_empty() {
+        None
+    } else {
+        Some(complexity)
+    }
 }
 
 fn source_files(path: &Path, filter: &FileFilter) -> io::Result<Vec<PathBuf>> {
@@ -108,9 +130,13 @@ mod tests {
             names,
             vec![
                 "java/Complexity.java",
+                "java/Inherits.java",
                 "kotlin/complexity.kt",
+                "kotlin/inherits.kt",
                 "rust/complexity.rs",
+                "rust/inherits.rs",
                 "swift/complexity.swift",
+                "swift/inherits.swift",
             ]
         );
     }
@@ -128,8 +154,80 @@ mod tests {
                 fixtures_dir()
                     .join("rust/complexity.rs")
                     .display()
-                    .to_string()
+                    .to_string(),
+                fixtures_dir()
+                    .join("rust/inherits.rs")
+                    .display()
+                    .to_string(),
             ]
+        );
+    }
+
+    fn implements(names: &[&str]) -> AnalysisOptions {
+        let names: Vec<String> = names.iter().map(|name| name.to_string()).collect();
+        AnalysisOptions {
+            types: TypeFilter::new(&names),
+            ..AnalysisOptions::default()
+        }
+    }
+
+    fn relative_names(reports: &[FileReport]) -> Vec<String> {
+        reports
+            .iter()
+            .map(|report| {
+                report
+                    .path
+                    .strip_prefix(fixtures_dir())
+                    .expect("fixture path")
+                    .display()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn analyze_with_implements_reports_only_matching_types() {
+        let reports = analyze(&fixtures_dir(), &implements(&["Describe"])).expect("analyze");
+        assert_eq!(
+            relative_names(&reports),
+            vec![
+                "java/Inherits.java",
+                "kotlin/inherits.kt",
+                "rust/inherits.rs",
+                "swift/inherits.swift",
+            ]
+        );
+        for report in &reports {
+            assert!(report.complexity.functions.is_empty());
+        }
+        let type_names: Vec<Vec<String>> = reports
+            .iter()
+            .map(|report| {
+                report
+                    .complexity
+                    .types
+                    .iter()
+                    .map(|t| t.name.clone())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            type_names,
+            vec![
+                vec!["Circle".to_string(), "Sub".to_string()],
+                vec!["Circle".to_string(), "Registry".to_string(),],
+                vec!["Circle".to_string(), "Marked".to_string()],
+                vec!["Circle".to_string()],
+            ]
+        );
+    }
+
+    #[test]
+    fn analyze_with_implements_matches_trailing_simple_name() {
+        let reports = analyze(&fixtures_dir(), &implements(&["Display"])).expect("analyze");
+        assert_eq!(
+            relative_names(&reports),
+            vec!["rust/complexity.rs", "rust/inherits.rs"]
         );
     }
 

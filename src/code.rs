@@ -17,6 +17,10 @@ pub struct FunctionComplexity {
 /// A class/struct/enum/trait-like declaration and the functions it contains.
 pub struct TypeComplexity {
     pub name: String,
+    /// Raw source text of the type's extends/implements/conformance/trait
+    /// clauses, unioned across split declarations (impl blocks, extensions).
+    /// Generic arguments are preserved (`Comparable<String>`).
+    pub supertypes: Vec<String>,
     pub functions: Vec<FunctionComplexity>,
 }
 
@@ -81,6 +85,7 @@ mod tests {
     fn rollup_of_no_functions_is_zero() {
         let complexity = TypeComplexity {
             name: "Empty".to_string(),
+            supertypes: Vec::new(),
             functions: Vec::new(),
         };
         let rollup = complexity.rollup();
@@ -93,6 +98,7 @@ mod tests {
     fn rollup_of_single_function_matches_its_complexity() {
         let complexity = TypeComplexity {
             name: "Single".to_string(),
+            supertypes: Vec::new(),
             functions: vec![function("only", 3)],
         };
         let rollup = complexity.rollup();
@@ -107,6 +113,7 @@ mod tests {
             functions: vec![function("top", 4)],
             types: vec![TypeComplexity {
                 name: "Shape".to_string(),
+                supertypes: Vec::new(),
                 functions: vec![function("area", 1), function("label", 7)],
             }],
         };

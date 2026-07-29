@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::code::branch::{BranchFilter, BranchSpec};
 use crate::feature::complexity::config::{self, Config, DEFAULT_RULE, RuleConfig};
-use crate::feature::complexity::filter::FileFilter;
+use crate::feature::complexity::filter::{FileFilter, TypeFilter};
 use crate::feature::complexity::options::AnalysisOptions;
 
 /// Raw flag values, before any config merging or compilation.
@@ -14,6 +14,7 @@ pub struct Overrides {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub branches: Vec<String>,
+    pub implements: Vec<String>,
     pub rule: Option<String>,
 }
 
@@ -36,6 +37,7 @@ fn merge(config: Option<Config>, overrides: &Overrides, dir: &Path) -> io::Resul
             selected(&overrides.include, &rule.include),
             selected(&overrides.exclude, &rule.exclude),
         )?,
+        types: TypeFilter::new(selected(&overrides.implements, &rule.implements)),
         branches: BranchFilter::from_specs(&specs),
     })
 }
@@ -121,6 +123,7 @@ mod tests {
     fn no_config_no_flags_counts_everything() {
         let options = merge(None, &Overrides::default(), &dir()).expect("resolves");
         assert!(options.files.matches(Path::new("notes.md")));
+        assert!(options.types.matches(&[]));
         for kind in BranchKind::ALL {
             assert!(options.branches.allows_kind(kind));
         }
@@ -241,6 +244,26 @@ mod tests {
         let options = merge(Some(config), &overrides, &dir()).expect("resolves");
         assert!(options.branches.allows_kind(BranchKind::If));
         assert!(!options.branches.allows_kind(BranchKind::Switch));
+    }
+
+    #[test]
+    fn rule_implements_applies() {
+        let config = config_from("[[rule]]\nimplements = [\"Labeled\"]\n");
+        let options = merge(Some(config), &Overrides::default(), &dir()).expect("resolves");
+        assert!(options.types.matches(&["Labeled".to_string()]));
+        assert!(!options.types.matches(&["Other".to_string()]));
+    }
+
+    #[test]
+    fn flag_implements_replaces_rule_implements() {
+        let config = config_from("[[rule]]\nimplements = [\"Labeled\"]\n");
+        let overrides = Overrides {
+            implements: vec!["Describe".to_string()],
+            ..Overrides::default()
+        };
+        let options = merge(Some(config), &overrides, &dir()).expect("resolves");
+        assert!(options.types.matches(&["Describe".to_string()]));
+        assert!(!options.types.matches(&["Labeled".to_string()]));
     }
 
     #[test]

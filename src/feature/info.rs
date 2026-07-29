@@ -17,6 +17,7 @@ name = \"default\"
 include = [\"*.rs\"]
 exclude = [\"**/generated/**\"]
 branches = [\"switch\", \"boolean-operator\"]
+implements = [\"Labeled\"]
 ";
 
 /// Renders the full vocabulary documentation: friendly branch kinds, the
@@ -28,6 +29,7 @@ pub fn text() -> String {
         language_sections(),
         raw_section(),
         glob_section(),
+        implements_section(),
         config_section(),
     ];
     sections.join("\n")
@@ -94,6 +96,24 @@ fn glob_section() -> String {
     )
 }
 
+fn implements_section() -> String {
+    String::from(
+        "TYPE FILTERING\n\
+         --implements <NAME> (repeatable) analyzes only types that implement\n\
+         or extend the named supertype: one key covers interfaces,\n\
+         protocols, traits, and superclasses (Swift inheritance clauses and\n\
+         Kotlin delegation specifiers do not syntactically distinguish\n\
+         them). Multiple names OR together. Generic arguments are stripped\n\
+         from both sides, so `Comparable<String>` matches `Comparable`; a\n\
+         name matches a supertype's full text or its trailing simple name\n\
+         (`Display` matches `std::fmt::Display`). Top-level functions\n\
+         implement nothing, so any selection drops them, and files left\n\
+         with no matching types are omitted. Matching is per type: in Rust,\n\
+         if any impl block matches, all of the type's functions are\n\
+         included.\n",
+    )
+}
+
 fn config_section() -> String {
     format!(
         "CONFIG FILE\n\
@@ -102,8 +122,8 @@ fn config_section() -> String {
          --rule <NAME> selects one; without it, the rule named \"default\" is\n\
          used if present, else the built-in defaults (a config file's mere\n\
          presence does not change a bare `smell <path>` invocation). Explicit\n\
-         --include/--exclude/--branches flags replace a rule's value for that\n\
-         field entirely rather than merging with it.\n\n{CONFIG_EXAMPLE}"
+         --include/--exclude/--branches/--implements flags replace a rule's\n\
+         value for that field entirely rather than merging with it.\n\n{CONFIG_EXAMPLE}"
     )
 }
 
@@ -167,5 +187,12 @@ mod tests {
     #[test]
     fn text_includes_the_config_example() {
         assert!(text().contains(CONFIG_EXAMPLE));
+    }
+
+    #[test]
+    fn text_documents_implements() {
+        let text = text();
+        assert!(text.contains("--implements"));
+        assert!(text.contains("`Comparable<String>` matches `Comparable`"));
     }
 }
