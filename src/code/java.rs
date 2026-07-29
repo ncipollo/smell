@@ -3,7 +3,7 @@ use tree_sitter::Node;
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
 use crate::code::collector;
-use crate::code::collector::{FunctionDecl, LanguageRules, Visit};
+use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_statement"),
@@ -53,9 +53,10 @@ struct JavaRules;
 impl LanguageRules for JavaRules {
     fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a> {
         match node.kind() {
-            kind if TYPE_KINDS.contains(&kind) => {
-                Visit::Type(collector::field_text(node, "name", source))
-            }
+            kind if TYPE_KINDS.contains(&kind) => Visit::Type(TypeDecl {
+                name: collector::field_text(node, "name", source),
+                supertypes: supertypes(node, source),
+            }),
             kind if FUNCTION_KINDS.contains(&kind) => Visit::Functions(vec![FunctionDecl {
                 name: collector::field_text(node, "name", source),
                 body: node,
@@ -72,6 +73,38 @@ impl LanguageRules for JavaRules {
 fn is_boolean_operator(node: Node, _source: &str) -> bool {
     node.child_by_field_name("operator")
         .is_some_and(|operator| matches!(operator.kind(), "&&" | "||"))
+}
+
+/// The superclass and implemented/extended interfaces of a declaration.
+/// The `superclass` and `interfaces` fields wrap keywords like `extends`, so
+/// only their named children are type names; interface declarations carry
+/// their parents in a plain `extends_interfaces` child instead of a field.
+fn supertypes(node: Node, source: &str) -> Vec<String> {
+    let mut supertypes = Vec::new();
+    if let Some(superclass) = node.child_by_field_name("superclass") {
+        supertypes.extend(named_child_texts(superclass, source));
+    }
+    if let Some(interfaces) = node.child_by_field_name("interfaces") {
+        supertypes.extend(type_list_names(interfaces, source));
+    }
+    if let Some(extends) = collector::find_child(node, "extends_interfaces") {
+        supertypes.extend(type_list_names(extends, source));
+    }
+    supertypes
+}
+
+/// Type names inside a clause's `type_list` child.
+fn type_list_names(clause: Node, source: &str) -> Vec<String> {
+    collector::find_child(clause, "type_list")
+        .map(|list| named_child_texts(list, source))
+        .unwrap_or_default()
+}
+
+fn named_child_texts(node: Node, source: &str) -> Vec<String> {
+    let mut cursor = node.walk();
+    node.named_children(&mut cursor)
+        .map(|child| collector::node_text(child, source))
+        .collect()
 }
 
 #[cfg(test)]
@@ -101,6 +134,31 @@ mod tests {
                 ("Labeled".to_string(), vec![("label".to_string(), 2)]),
                 ("Kind".to_string(), vec![("isCircle".to_string(), 1)]),
                 ("Point".to_string(), vec![("Point".to_string(), 2)]),
+            ]
+        );
+    }
+
+    #[test]
+    fn file_complexity_reports_supertypes() {
+        let complexity = file_complexity(
+            &testing::fixture("java/Inherits.java"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::supertype_summary(&complexity),
+            vec![
+                ("Describe".to_string(), vec![]),
+                ("Base".to_string(), vec![]),
+                (
+                    "Circle".to_string(),
+                    vec![
+                        "Base".to_string(),
+                        "Describe".to_string(),
+                        "Comparable<Circle>".to_string(),
+                    ],
+                ),
+                ("Plain".to_string(), vec![]),
+                ("Sub".to_string(), vec!["Describe".to_string()]),
             ]
         );
     }

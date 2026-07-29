@@ -28,6 +28,11 @@ struct Cli {
     #[arg(long, value_delimiter = ',')]
     branches: Vec<String>,
 
+    /// Only analyze types implementing/extending this interface, protocol,
+    /// trait, or superclass (repeatable; see --info).
+    #[arg(long, value_name = "NAME")]
+    implements: Vec<String>,
+
     /// Use the named rule from smell.toml instead of the "default" rule.
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
@@ -43,6 +48,7 @@ pub fn run() -> ExitCode {
         include,
         exclude,
         branches,
+        implements,
         rule,
         info,
     } = Cli::parse();
@@ -56,6 +62,7 @@ pub fn run() -> ExitCode {
             include,
             exclude,
             branches,
+            implements,
             rule,
         },
     )
@@ -105,6 +112,26 @@ mod tests {
         let cli = Cli::try_parse_from(["smell", "src", "--branches", "switch,loop"])
             .expect("branches should parse");
         assert_eq!(cli.branches, vec!["switch", "loop"]);
+    }
+
+    #[test]
+    fn parses_repeatable_implements() {
+        let cli = Cli::try_parse_from([
+            "smell",
+            "src",
+            "--implements",
+            "Describe",
+            "--implements",
+            "Labeled",
+        ])
+        .expect("implements should parse");
+        assert_eq!(cli.implements, vec!["Describe", "Labeled"]);
+    }
+
+    #[test]
+    fn implements_defaults_to_empty() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert!(cli.implements.is_empty());
     }
 
     #[test]

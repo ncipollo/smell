@@ -3,7 +3,7 @@ use tree_sitter::Node;
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
 use crate::code::collector;
-use crate::code::collector::{FunctionDecl, LanguageRules, Visit};
+use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_statement"),
@@ -45,9 +45,10 @@ struct SwiftRules;
 impl LanguageRules for SwiftRules {
     fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a> {
         match node.kind() {
-            kind if TYPE_KINDS.contains(&kind) => {
-                Visit::Type(collector::field_text(node, "name", source))
-            }
+            kind if TYPE_KINDS.contains(&kind) => Visit::Type(TypeDecl {
+                name: collector::field_text(node, "name", source),
+                supertypes: supertypes(node, source),
+            }),
             "function_declaration" => Visit::Functions(vec![FunctionDecl {
                 name: collector::field_text(node, "name", source),
                 body: node,
@@ -60,6 +61,22 @@ impl LanguageRules for SwiftRules {
     fn branch_rules(&self) -> &'static [BranchRule] {
         BRANCH_RULES
     }
+}
+
+/// Inherited protocols and superclasses from a declaration's inheritance
+/// clause. Extensions are `class_declaration` nodes too, so their
+/// conformances union into the extended type.
+fn supertypes(node: Node, source: &str) -> Vec<String> {
+    let mut cursor = node.walk();
+    node.children(&mut cursor)
+        .filter(|child| child.kind() == "inheritance_specifier")
+        .map(
+            |specifier| match specifier.child_by_field_name("inherits_from") {
+                Some(inherited) => collector::node_text(inherited, source),
+                None => collector::node_text(specifier, source),
+            },
+        )
+        .collect()
 }
 
 fn is_optional_try(node: Node, source: &str) -> bool {
@@ -166,6 +183,31 @@ mod tests {
                     ("describe".to_string(), 2),
                 ],
             )]
+        );
+    }
+
+    #[test]
+    fn file_complexity_reports_supertypes() {
+        let complexity = file_complexity(
+            &testing::fixture("swift/inherits.swift"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::supertype_summary(&complexity),
+            vec![
+                ("Base".to_string(), vec![]),
+                (
+                    "Circle".to_string(),
+                    vec![
+                        "Base".to_string(),
+                        "Describe".to_string(),
+                        "Swift.Equatable".to_string(),
+                    ],
+                ),
+                ("Plain".to_string(), vec![]),
+                ("Container".to_string(), vec![]),
+                ("Wide".to_string(), vec!["Container<Int>".to_string()]),
+            ]
         );
     }
 

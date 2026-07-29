@@ -3,7 +3,7 @@ use tree_sitter::Node;
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
 use crate::code::collector;
-use crate::code::collector::{FunctionDecl, LanguageRules, Visit};
+use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_expression"),
@@ -54,11 +54,15 @@ impl LanguageRules for RustRules {
     fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a> {
         match node.kind() {
             kind if TYPE_KINDS.contains(&kind) => {
-                Visit::Type(collector::field_text(node, "name", source))
+                Visit::Type(TypeDecl::plain(collector::field_text(node, "name", source)))
             }
             // Impl blocks scope to the implemented type's name so that
-            // `impl Shape` and `impl Display for Shape` merge with `Shape`.
-            "impl_item" => Visit::Type(collector::field_text(node, "type", source)),
+            // `impl Shape` and `impl Display for Shape` merge with `Shape`,
+            // accumulating the implemented traits as supertypes.
+            "impl_item" => Visit::Type(TypeDecl {
+                name: collector::field_text(node, "type", source),
+                supertypes: impl_trait(node, source),
+            }),
             "function_item" => Visit::Functions(vec![FunctionDecl {
                 name: collector::field_text(node, "name", source),
                 body: node,
@@ -70,6 +74,15 @@ impl LanguageRules for RustRules {
     fn branch_rules(&self) -> &'static [BranchRule] {
         BRANCH_RULES
     }
+}
+
+/// The trait an impl block implements, if any. Trait supertraits
+/// (`trait Foo: Bar`) are not collected.
+fn impl_trait(node: Node, source: &str) -> Vec<String> {
+    node.child_by_field_name("trait")
+        .map(|implemented| collector::node_text(implemented, source))
+        .into_iter()
+        .collect()
 }
 
 fn has_let_else(node: Node, _source: &str) -> bool {
@@ -116,6 +129,27 @@ mod tests {
                 ),
                 ("Kind".to_string(), vec![("label".to_string(), 3)]),
                 ("Describe".to_string(), vec![("describe".to_string(), 1)]),
+            ]
+        );
+    }
+
+    #[test]
+    fn file_complexity_reports_supertypes() {
+        let complexity = file_complexity(
+            &testing::fixture("rust/inherits.rs"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::supertype_summary(&complexity),
+            vec![
+                ("Describe".to_string(), vec![]),
+                (
+                    "Circle".to_string(),
+                    vec!["Describe".to_string(), "std::fmt::Display".to_string()],
+                ),
+                ("Plain".to_string(), vec![]),
+                ("Wrapper".to_string(), vec!["From<i32>".to_string()]),
+                ("Marked".to_string(), vec!["Describe".to_string()]),
             ]
         );
     }

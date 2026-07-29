@@ -1,4 +1,5 @@
-//! Include/exclude glob filtering for the files an analysis visits.
+//! Filters controlling which files and types an analysis visits: include/
+//! exclude globs for files, and `--implements` supertype names for types.
 
 use std::io;
 use std::path::Path;
@@ -46,6 +47,60 @@ impl FileFilter {
             .is_none_or(|include| include.is_match(path));
         included && !self.exclude.is_match(path)
     }
+}
+
+/// Supertype names selected by `--implements`. A type matches when any of its
+/// supertypes matches any selected name; an empty selection matches every
+/// type. Names compare with generic arguments stripped
+/// (`Comparable<String>` → `Comparable`), against either the full supertype
+/// text or its trailing simple name (`Display` matches `std::fmt::Display`).
+#[derive(Debug, Default)]
+pub struct TypeFilter {
+    implements: Vec<String>,
+}
+
+impl TypeFilter {
+    pub fn new(implements: &[String]) -> TypeFilter {
+        TypeFilter {
+            implements: implements.iter().map(|name| normalize(name)).collect(),
+        }
+    }
+
+    /// Whether no supertype names were selected (every type matches).
+    pub fn is_empty(&self) -> bool {
+        self.implements.is_empty()
+    }
+
+    /// Whether a type with these supertypes should be analyzed.
+    pub fn matches(&self, supertypes: &[String]) -> bool {
+        self.is_empty()
+            || supertypes
+                .iter()
+                .any(|supertype| self.matches_supertype(supertype))
+    }
+
+    fn matches_supertype(&self, supertype: &str) -> bool {
+        let normalized = normalize(supertype);
+        let simple = simple_name(&normalized);
+        self.implements
+            .iter()
+            .any(|name| *name == normalized || *name == simple)
+    }
+}
+
+/// Strips generic arguments and surrounding whitespace: `a.b.C<D>` → `a.b.C`.
+fn normalize(name: &str) -> String {
+    let base = match name.find('<') {
+        Some(index) => &name[..index],
+        None => name,
+    };
+    base.trim().to_string()
+}
+
+/// The trailing simple name of a possibly qualified type:
+/// `std::fmt::Display` → `Display`, `Swift.Codable` → `Codable`.
+fn simple_name(normalized: &str) -> &str {
+    normalized.rsplit(['.', ':']).next().unwrap_or(normalized)
 }
 
 fn glob_set(patterns: &[String]) -> io::Result<GlobSet> {
@@ -115,5 +170,54 @@ mod tests {
         let error = FileFilter::new(&strings(&["["]), &[]).expect_err("invalid glob");
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(error.to_string().contains("["));
+    }
+
+    #[test]
+    fn empty_type_filter_matches_every_type() {
+        let filter = TypeFilter::default();
+        assert!(filter.is_empty());
+        assert!(filter.matches(&strings(&["Describe"])));
+        assert!(filter.matches(&[]));
+    }
+
+    #[test]
+    fn type_filter_matches_full_supertype_text() {
+        let filter = TypeFilter::new(&strings(&["std::fmt::Display"]));
+        assert!(filter.matches(&strings(&["std::fmt::Display"])));
+        assert!(!filter.matches(&strings(&["Display2"])));
+    }
+
+    #[test]
+    fn type_filter_matches_trailing_simple_name() {
+        let filter = TypeFilter::new(&strings(&["Display"]));
+        assert!(filter.matches(&strings(&["std::fmt::Display"])));
+        let filter = TypeFilter::new(&strings(&["Codable"]));
+        assert!(filter.matches(&strings(&["Swift.Codable"])));
+    }
+
+    #[test]
+    fn type_filter_strips_generic_arguments_from_supertypes() {
+        let filter = TypeFilter::new(&strings(&["Comparable"]));
+        assert!(filter.matches(&strings(&["Comparable<String>"])));
+    }
+
+    #[test]
+    fn type_filter_strips_generic_arguments_and_whitespace_from_names() {
+        let filter = TypeFilter::new(&strings(&["Comparable <String>"]));
+        assert!(filter.matches(&strings(&["Comparable<Circle>"])));
+    }
+
+    #[test]
+    fn type_filter_ors_across_names() {
+        let filter = TypeFilter::new(&strings(&["Describe", "Labeled"]));
+        assert!(filter.matches(&strings(&["Labeled"])));
+        assert!(filter.matches(&strings(&["Base", "Describe"])));
+        assert!(!filter.matches(&strings(&["Base"])));
+    }
+
+    #[test]
+    fn type_filter_rejects_types_without_supertypes() {
+        let filter = TypeFilter::new(&strings(&["Describe"]));
+        assert!(!filter.matches(&[]));
     }
 }

@@ -3,7 +3,7 @@ use tree_sitter::Node;
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
 use crate::code::collector;
-use crate::code::collector::{FunctionDecl, LanguageRules, Visit};
+use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_expression"),
@@ -42,10 +42,14 @@ struct KotlinRules;
 impl LanguageRules for KotlinRules {
     fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a> {
         match node.kind() {
-            "class_declaration" | "object_declaration" => {
-                Visit::Type(collector::field_text(node, "name", source))
-            }
-            "companion_object" => Visit::Type(companion_name(node, source)),
+            "class_declaration" | "object_declaration" => Visit::Type(TypeDecl {
+                name: collector::field_text(node, "name", source),
+                supertypes: supertypes(node, source),
+            }),
+            "companion_object" => Visit::Type(TypeDecl {
+                name: companion_name(node, source),
+                supertypes: supertypes(node, source),
+            }),
             "function_declaration" => Visit::Functions(vec![named_function(node, source)]),
             "secondary_constructor" => Visit::Functions(vec![function(node, "constructor")]),
             "anonymous_initializer" => Visit::Functions(vec![function(node, "init")]),
@@ -108,6 +112,33 @@ fn ancestor<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
     None
 }
 
+/// Superclasses and interfaces from a declaration's delegation specifiers.
+/// A specifier holds a constructor invocation (`Base(1)` — take just the
+/// type), an explicit delegation (`Describe by impl` — take just the type),
+/// or a bare type; annotations are skipped.
+fn supertypes(node: Node, source: &str) -> Vec<String> {
+    let Some(specifiers) = collector::find_child(node, "delegation_specifiers") else {
+        return Vec::new();
+    };
+    let mut cursor = specifiers.walk();
+    specifiers
+        .named_children(&mut cursor)
+        .filter(|child| child.kind() == "delegation_specifier")
+        .filter_map(|specifier| supertype_name(specifier, source))
+        .collect()
+}
+
+fn supertype_name(specifier: Node, source: &str) -> Option<String> {
+    let inner = specifier
+        .named_child(0)
+        .filter(|child| child.kind() != "annotation")?;
+    let named = match inner.kind() {
+        "constructor_invocation" | "explicit_delegation" => inner.named_child(0)?,
+        _ => inner,
+    };
+    Some(collector::node_text(named, source))
+}
+
 fn companion_name(node: Node, source: &str) -> String {
     let name = collector::field_text(node, "name", source);
     if name == "<unknown>" {
@@ -122,6 +153,28 @@ mod tests {
     use super::*;
     use crate::code::branch::BranchSpec;
     use crate::testing;
+
+    #[test]
+    fn file_complexity_reports_supertypes() {
+        let complexity = file_complexity(
+            &testing::fixture("kotlin/inherits.kt"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::supertype_summary(&complexity),
+            vec![
+                ("Describe".to_string(), vec![]),
+                ("Base".to_string(), vec![]),
+                (
+                    "Circle".to_string(),
+                    vec!["Base".to_string(), "Describe".to_string()],
+                ),
+                ("Plain".to_string(), vec![]),
+                ("Ranked".to_string(), vec!["Comparable<Ranked>".to_string()]),
+                ("Registry".to_string(), vec!["Describe".to_string()]),
+            ]
+        );
+    }
 
     #[test]
     fn file_complexity_reports_functions_grouped_by_type() {
