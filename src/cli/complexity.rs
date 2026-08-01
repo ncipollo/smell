@@ -1,12 +1,14 @@
 use std::env;
-use std::io;
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use comfy_table::{Attribute, Cell, Table};
 
 use crate::code::{ComplexityRollup, FunctionComplexity};
-use crate::{AnalysisOptions, FileReport, Overrides, analyze, resolve_options};
+use crate::{
+    AnalysisOptions, CheckFailure, FileReport, Overrides, analyze, check, resolve_options,
+};
 
 pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
     let options = match options(&overrides) {
@@ -21,12 +23,59 @@ pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
             for report in &reports {
                 print_file(report);
             }
-            ExitCode::SUCCESS
+            enforce_limit(&reports, options.max_complexity)
         }
         Err(error) => {
             eprintln!("error: {}: {error}", path.display());
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Applies the complexity limit check, reporting any failures on stderr.
+fn enforce_limit(reports: &[FileReport], limit: Option<usize>) -> ExitCode {
+    let Some(limit) = limit else {
+        return ExitCode::SUCCESS;
+    };
+    let failures = check(reports, limit);
+    if failures.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+    let color = io::stderr().is_terminal();
+    eprint!("{}", format_failures(&failures, limit, color));
+    ExitCode::FAILURE
+}
+
+const RED_BOLD: &str = "\x1b[1;31m";
+const RESET: &str = "\x1b[0m";
+
+fn format_failures(failures: &[CheckFailure], limit: usize, color: bool) -> String {
+    let header = format!(
+        "✗ complexity check failed: {} file(s) exceed limit {limit}",
+        failures.len()
+    );
+    let mut text = paint(&header, color);
+    text.push('\n');
+    for failure in failures {
+        text.push_str(&format!("{}\n", failure.path.display()));
+        for function in &failure.functions {
+            text.push_str(&format!(
+                "  {}  {}\n",
+                function.name,
+                paint(&function.complexity.to_string(), color)
+            ));
+        }
+    }
+    text
+}
+
+/// Wraps text in bold red when stderr is a terminal; plain otherwise so
+/// piped and CI output stays free of escape codes.
+fn paint(text: &str, color: bool) -> String {
+    if color {
+        format!("{RED_BOLD}{text}{RESET}")
+    } else {
+        text.to_string()
     }
 }
 
@@ -86,4 +135,52 @@ fn format_rollup(rollup: &ComplexityRollup) -> String {
         "total {} · max {} · avg {:.1}",
         rollup.total, rollup.max, rollup.average
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::feature::complexity::check::FailedFunction;
+
+    fn failures() -> Vec<CheckFailure> {
+        vec![
+            CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                functions: vec![FailedFunction {
+                    name: "Shape.area".to_string(),
+                    complexity: 12,
+                }],
+            },
+            CheckFailure {
+                path: PathBuf::from("src/b.rs"),
+                functions: vec![FailedFunction {
+                    name: "top".to_string(),
+                    complexity: 11,
+                }],
+            },
+        ]
+    }
+
+    #[test]
+    fn format_failures_leads_with_a_summary_then_lists_files_and_functions() {
+        assert_eq!(
+            format_failures(&failures(), 10, false),
+            "✗ complexity check failed: 2 file(s) exceed limit 10\n\
+             src/a.rs\n  Shape.area  12\nsrc/b.rs\n  top  11\n"
+        );
+    }
+
+    #[test]
+    fn format_failures_paints_the_header_and_complexities_red_when_colored() {
+        let text = format_failures(&failures(), 10, true);
+        assert!(text.starts_with(&format!(
+            "{RED_BOLD}✗ complexity check failed: 2 file(s) exceed limit 10{RESET}\n"
+        )));
+        assert!(text.contains(&format!("  Shape.area  {RED_BOLD}12{RESET}\n")));
+    }
+
+    #[test]
+    fn format_failures_without_color_has_no_escape_codes() {
+        assert!(!format_failures(&failures(), 10, false).contains('\x1b'));
+    }
 }

@@ -15,6 +15,7 @@ pub struct Overrides {
     pub exclude: Vec<String>,
     pub branches: Vec<String>,
     pub implements: Vec<String>,
+    pub max_complexity: Option<usize>,
     pub rule: Option<String>,
 }
 
@@ -39,6 +40,7 @@ fn merge(config: Option<Config>, overrides: &Overrides, dir: &Path) -> io::Resul
         )?,
         types: TypeFilter::new(selected(&overrides.implements, &rule.implements)),
         branches: BranchFilter::from_specs(&specs),
+        max_complexity: overrides.max_complexity.or(rule.max_complexity),
     })
 }
 
@@ -264,6 +266,30 @@ mod tests {
         let options = merge(Some(config), &overrides, &dir()).expect("resolves");
         assert!(options.types.matches(&["Describe".to_string()]));
         assert!(!options.types.matches(&["Labeled".to_string()]));
+    }
+
+    #[test]
+    fn no_config_no_flags_sets_no_complexity_limit() {
+        let options = merge(None, &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_complexity, None);
+    }
+
+    #[test]
+    fn rule_max_complexity_applies() {
+        let config = config_from("[[rule]]\nmax_complexity = 10\n");
+        let options = merge(Some(config), &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_complexity, Some(10));
+    }
+
+    #[test]
+    fn flag_max_complexity_replaces_rule_max_complexity() {
+        let config = config_from("[[rule]]\nmax_complexity = 10\n");
+        let overrides = Overrides {
+            max_complexity: Some(5),
+            ..Overrides::default()
+        };
+        let options = merge(Some(config), &overrides, &dir()).expect("resolves");
+        assert_eq!(options.max_complexity, Some(5));
     }
 
     #[test]
