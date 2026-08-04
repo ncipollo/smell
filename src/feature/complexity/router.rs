@@ -2,9 +2,9 @@ use std::path::Path;
 
 use crate::code::FileComplexity;
 use crate::code::branch::BranchFilter;
-use crate::code::{java, kotlin, rust, swift};
+use crate::code::{java, javascript, kotlin, rust, swift};
 
-const SUPPORTED_EXTENSIONS: &[&str] = &["java", "kt", "kts", "rs", "swift"];
+const SUPPORTED_EXTENSIONS: &[&str] = &["java", "js", "mjs", "cjs", "kt", "kts", "rs", "swift"];
 
 pub fn is_supported(path: &Path) -> bool {
     extension(path).is_some_and(|extension| SUPPORTED_EXTENSIONS.contains(&extension.as_str()))
@@ -15,6 +15,7 @@ pub fn is_supported(path: &Path) -> bool {
 pub fn file_complexity(path: &Path, source: &str, filter: &BranchFilter) -> Option<FileComplexity> {
     match extension(path)?.as_str() {
         "java" => Some(java::file_complexity(source, filter)),
+        "js" | "mjs" | "cjs" => Some(javascript::file_complexity(source, filter)),
         "kt" | "kts" => Some(kotlin::file_complexity(source, filter)),
         "rs" => Some(rust::file_complexity(source, filter)),
         "swift" => Some(swift::file_complexity(source, filter)),

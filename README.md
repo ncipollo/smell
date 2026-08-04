@@ -47,6 +47,7 @@ src/shape.rs
 ## Supported languages
 
 - Java (`.java`)
+- JavaScript (`.js`, `.mjs`, `.cjs`)
 - Kotlin (`.kt`, `.kts`)
 - Rust (`.rs`)
 - Swift (`.swift`)
