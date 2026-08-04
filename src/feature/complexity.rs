@@ -132,6 +132,8 @@ mod tests {
             vec![
                 "java/Complexity.java",
                 "java/Inherits.java",
+                "javascript/complexity.js",
+                "javascript/inherits.js",
                 "kotlin/complexity.kt",
                 "kotlin/inherits.kt",
                 "rust/complexity.rs",
@@ -193,6 +195,7 @@ mod tests {
             relative_names(&reports),
             vec![
                 "java/Inherits.java",
+                "javascript/inherits.js",
                 "kotlin/inherits.kt",
                 "rust/inherits.rs",
                 "swift/inherits.swift",
@@ -216,6 +219,7 @@ mod tests {
             type_names,
             vec![
                 vec!["Circle".to_string(), "Sub".to_string()],
+                vec!["Circle".to_string()],
                 vec!["Circle".to_string(), "Registry".to_string(),],
                 vec!["Circle".to_string(), "Marked".to_string()],
                 vec!["Circle".to_string()],
