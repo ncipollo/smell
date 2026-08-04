@@ -32,6 +32,7 @@ pub fn text() -> String {
         glob_section(),
         implements_section(),
         limit_section(),
+        quiet_section(),
         config_section(),
     ];
     sections.join("\n")
@@ -128,6 +129,16 @@ fn limit_section() -> String {
     )
 }
 
+fn quiet_section() -> String {
+    String::from(
+        "QUIET MODE\n\
+         --quiet (or -q) suppresses the per-file complexity report on\n\
+         stdout. Errors and, when --max-complexity is set, the failure\n\
+         report on stderr are still printed, so a quiet CI run stays\n\
+         silent on success and prints only what a failure requires.\n",
+    )
+}
+
 fn config_section() -> String {
     format!(
         "CONFIG FILE\n\
@@ -216,5 +227,12 @@ mod tests {
         let text = text();
         assert!(text.contains("--max-complexity"));
         assert!(text.contains("exits non-zero"));
+    }
+
+    #[test]
+    fn text_documents_quiet() {
+        let text = text();
+        assert!(text.contains("--quiet"));
+        assert!(text.contains("silent on success"));
     }
 }

@@ -42,6 +42,11 @@ struct Cli {
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
 
+    /// Suppress the per-file complexity report; errors and --max-complexity
+    /// failures are still printed.
+    #[arg(short, long)]
+    quiet: bool,
+
     /// Print the branch-kind and glob vocabulary docs and exit.
     #[arg(long)]
     info: bool,
@@ -56,6 +61,7 @@ pub fn run() -> ExitCode {
         implements,
         max_complexity,
         rule,
+        quiet,
         info,
     } = Cli::parse();
     if info {
@@ -72,6 +78,7 @@ pub fn run() -> ExitCode {
             max_complexity,
             rule,
         },
+        quiet,
     )
 }
 
@@ -172,5 +179,23 @@ mod tests {
     fn rule_defaults_to_none() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert_eq!(cli.rule, None);
+    }
+
+    #[test]
+    fn parses_quiet_long() {
+        let cli = Cli::try_parse_from(["smell", "src", "--quiet"]).expect("--quiet should parse");
+        assert!(cli.quiet);
+    }
+
+    #[test]
+    fn parses_quiet_short() {
+        let cli = Cli::try_parse_from(["smell", "src", "-q"]).expect("-q should parse");
+        assert!(cli.quiet);
+    }
+
+    #[test]
+    fn quiet_defaults_to_false() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert!(!cli.quiet);
     }
 }
