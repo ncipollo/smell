@@ -10,7 +10,7 @@ use crate::{
     AnalysisOptions, CheckFailure, FileReport, Overrides, analyze, check, resolve_options,
 };
 
-pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
+pub fn run(path: PathBuf, overrides: Overrides, quiet: bool) -> ExitCode {
     let options = match options(&overrides) {
         Ok(options) => options,
         Err(error) => {
@@ -20,9 +20,7 @@ pub fn run(path: PathBuf, overrides: Overrides) -> ExitCode {
     };
     match analyze(&path, &options) {
         Ok(reports) => {
-            for report in &reports {
-                print_file(report);
-            }
+            print!("{}", format_reports(&reports, quiet));
             enforce_limit(&reports, options.max_complexity)
         }
         Err(error) => {
@@ -84,8 +82,17 @@ fn options(overrides: &Overrides) -> io::Result<AnalysisOptions> {
     resolve_options(&dir, overrides)
 }
 
-fn print_file(report: &FileReport) {
-    println!("{}", report.path.display());
+/// Renders the per-file complexity tables, or nothing when `quiet` — the
+/// point of a quiet run is a silent stdout on success.
+fn format_reports(reports: &[FileReport], quiet: bool) -> String {
+    if quiet {
+        return String::new();
+    }
+    reports.iter().map(format_file).collect()
+}
+
+fn format_file(report: &FileReport) -> String {
+    let mut text = format!("{}\n", report.path.display());
     let mut table = Table::new();
     table.set_header(["Function", "Complexity"]);
     for complexity_type in &report.complexity.types {
@@ -105,7 +112,8 @@ fn print_file(report: &FileReport) {
         );
     }
     add_rollup_row(&mut table, "file", &report.complexity.rollup());
-    println!("{table}\n");
+    text.push_str(&format!("{table}\n\n"));
+    text
 }
 
 fn add_group_rows(
@@ -182,5 +190,30 @@ mod tests {
     #[test]
     fn format_failures_without_color_has_no_escape_codes() {
         assert!(!format_failures(&failures(), 10, false).contains('\x1b'));
+    }
+
+    fn sample_reports() -> Vec<FileReport> {
+        vec![FileReport {
+            path: PathBuf::from("src/a.rs"),
+            complexity: crate::code::FileComplexity {
+                functions: vec![FunctionComplexity {
+                    name: "top".to_string(),
+                    complexity: 3,
+                }],
+                types: vec![],
+            },
+        }]
+    }
+
+    #[test]
+    fn format_reports_is_empty_when_quiet() {
+        assert_eq!(format_reports(&sample_reports(), true), "");
+    }
+
+    #[test]
+    fn format_reports_includes_each_file_when_not_quiet() {
+        let text = format_reports(&sample_reports(), false);
+        assert!(text.contains("src/a.rs"));
+        assert!(text.contains("top"));
     }
 }
