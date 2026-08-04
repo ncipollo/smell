@@ -2,6 +2,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
+
 use crate::code::FileComplexity;
 use crate::feature::complexity::filter::{FileFilter, TypeFilter};
 use crate::feature::complexity::options::AnalysisOptions;
@@ -23,13 +25,11 @@ pub struct FileReport {
 pub fn analyze(path: &Path, options: &AnalysisOptions) -> io::Result<Vec<FileReport>> {
     let mut files = source_files(path, &options.files)?;
     files.sort();
-    let mut reports = Vec::new();
-    for file in files {
-        if let Some(report) = analyze_file(file, options)? {
-            reports.push(report);
-        }
-    }
-    Ok(reports)
+    let reports = files
+        .into_par_iter()
+        .map(|file| analyze_file(file, options))
+        .collect::<io::Result<Vec<_>>>()?;
+    Ok(reports.into_iter().flatten().collect())
 }
 
 /// Analyzes one file; `None` when the type filter leaves nothing to report.
