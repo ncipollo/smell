@@ -47,6 +47,11 @@ struct Cli {
     #[arg(short, long)]
     quiet: bool,
 
+    /// Print the analysis as JSON instead of the table report; the
+    /// --max-complexity check result is embedded in the document.
+    #[arg(long, conflicts_with = "quiet")]
+    json: bool,
+
     /// Print the branch-kind and glob vocabulary docs and exit.
     #[arg(long)]
     info: bool,
@@ -62,6 +67,7 @@ pub fn run() -> ExitCode {
         max_complexity,
         rule,
         quiet,
+        json,
         info,
     } = Cli::parse();
     if info {
@@ -79,6 +85,7 @@ pub fn run() -> ExitCode {
             rule,
         },
         quiet,
+        json,
     )
 }
 
@@ -197,5 +204,23 @@ mod tests {
     fn quiet_defaults_to_false() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert!(!cli.quiet);
+    }
+
+    #[test]
+    fn parses_json() {
+        let cli = Cli::try_parse_from(["smell", "src", "--json"]).expect("--json should parse");
+        assert!(cli.json);
+    }
+
+    #[test]
+    fn json_defaults_to_false() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert!(!cli.json);
+    }
+
+    #[test]
+    fn json_conflicts_with_quiet() {
+        assert!(Cli::try_parse_from(["smell", "src", "--json", "--quiet"]).is_err());
+        assert!(Cli::try_parse_from(["smell", "src", "--json", "-q"]).is_err());
     }
 }

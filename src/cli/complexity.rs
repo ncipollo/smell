@@ -5,12 +5,14 @@ use std::process::ExitCode;
 
 use comfy_table::{Attribute, Cell, Table};
 
+mod json;
+
 use crate::code::{ComplexityRollup, FunctionComplexity};
 use crate::{
     AnalysisOptions, CheckFailure, FileReport, Overrides, analyze, check, resolve_options,
 };
 
-pub fn run(path: PathBuf, overrides: Overrides, quiet: bool) -> ExitCode {
+pub fn run(path: PathBuf, overrides: Overrides, quiet: bool, json: bool) -> ExitCode {
     let options = match options(&overrides) {
         Ok(options) => options,
         Err(error) => {
@@ -19,10 +21,7 @@ pub fn run(path: PathBuf, overrides: Overrides, quiet: bool) -> ExitCode {
         }
     };
     match analyze(&path, &options) {
-        Ok(reports) => {
-            print!("{}", format_reports(&reports, quiet));
-            enforce_limit(&reports, options.max_complexity)
-        }
+        Ok(reports) => emit(&reports, options.max_complexity, quiet, json),
         Err(error) => {
             eprintln!("error: {}: {error}", path.display());
             ExitCode::FAILURE
@@ -30,18 +29,27 @@ pub fn run(path: PathBuf, overrides: Overrides, quiet: bool) -> ExitCode {
     }
 }
 
-/// Applies the complexity limit check, reporting any failures on stderr.
-fn enforce_limit(reports: &[FileReport], limit: Option<usize>) -> ExitCode {
-    let Some(limit) = limit else {
-        return ExitCode::SUCCESS;
-    };
-    let failures = check(reports, limit);
-    if failures.is_empty() {
-        return ExitCode::SUCCESS;
+/// Renders the analysis in the requested format, running the
+/// --max-complexity check once and sharing its result across both: embedded
+/// in the document for `--json`, or a colored stderr report for the table.
+fn emit(reports: &[FileReport], limit: Option<usize>, quiet: bool, json: bool) -> ExitCode {
+    let failures = limit.map(|limit| check(reports, limit)).unwrap_or_default();
+    if json {
+        println!("{}", self::json::render(reports, limit, &failures));
+    } else {
+        print!("{}", format_reports(reports, quiet));
+        if let Some(limit) = limit
+            && !failures.is_empty()
+        {
+            let color = io::stderr().is_terminal();
+            eprint!("{}", format_failures(&failures, limit, color));
+        }
     }
-    let color = io::stderr().is_terminal();
-    eprint!("{}", format_failures(&failures, limit, color));
-    ExitCode::FAILURE
+    if failures.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 const RED_BOLD: &str = "\x1b[1;31m";
