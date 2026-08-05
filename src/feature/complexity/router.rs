@@ -2,10 +2,11 @@ use std::path::Path;
 
 use crate::code::FileComplexity;
 use crate::code::branch::BranchFilter;
-use crate::code::{java, javascript, kotlin, python, rust, swift};
+use crate::code::{java, javascript, kotlin, python, rust, swift, typescript};
 
-const SUPPORTED_EXTENSIONS: &[&str] =
-    &["java", "js", "mjs", "cjs", "kt", "kts", "py", "rs", "swift"];
+const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "java", "js", "mjs", "cjs", "kt", "kts", "py", "rs", "swift", "ts", "mts", "cts", "tsx",
+];
 
 pub fn is_supported(path: &Path) -> bool {
     extension(path).is_some_and(|extension| SUPPORTED_EXTENSIONS.contains(&extension.as_str()))
@@ -21,6 +22,8 @@ pub fn file_complexity(path: &Path, source: &str, filter: &BranchFilter) -> Opti
         "py" => Some(python::file_complexity(source, filter)),
         "rs" => Some(rust::file_complexity(source, filter)),
         "swift" => Some(swift::file_complexity(source, filter)),
+        "ts" | "mts" | "cts" => Some(typescript::file_complexity(source, filter)),
+        "tsx" => Some(typescript::tsx_file_complexity(source, filter)),
         _ => None,
     }
 }
@@ -69,6 +72,17 @@ mod tests {
             &BranchFilter::default(),
         )
         .expect("python routed");
+        assert_eq!(complexity.functions.len(), 1);
+    }
+
+    #[test]
+    fn file_complexity_routes_tsx() {
+        let complexity = file_complexity(
+            Path::new("file.tsx"),
+            "function simple() { return <div />; }",
+            &BranchFilter::default(),
+        )
+        .expect("tsx routed");
         assert_eq!(complexity.functions.len(), 1);
     }
 
