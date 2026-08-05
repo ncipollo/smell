@@ -53,3 +53,4 @@ src/shape.rs
 - Python (`.py`)
 - Rust (`.rs`)
 - Swift (`.swift`)
+- TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`)

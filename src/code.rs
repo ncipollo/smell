@@ -9,6 +9,7 @@ pub mod kotlin;
 pub mod python;
 pub mod rust;
 pub mod swift;
+pub mod typescript;
 
 pub struct FunctionComplexity {
     pub name: String,

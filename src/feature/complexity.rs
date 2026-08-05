@@ -142,6 +142,9 @@ mod tests {
                 "rust/inherits.rs",
                 "swift/complexity.swift",
                 "swift/inherits.swift",
+                "typescript/complexity.ts",
+                "typescript/complexity.tsx",
+                "typescript/inherits.ts",
             ]
         );
     }
@@ -202,6 +205,7 @@ mod tests {
                 "python/inherits.py",
                 "rust/inherits.rs",
                 "swift/inherits.swift",
+                "typescript/inherits.ts",
             ]
         );
         for report in &reports {
@@ -226,6 +230,7 @@ mod tests {
                 vec!["Circle".to_string(), "Registry".to_string(),],
                 vec!["Circle".to_string(), "Registry".to_string()],
                 vec!["Circle".to_string(), "Marked".to_string()],
+                vec!["Circle".to_string()],
                 vec!["Circle".to_string()],
             ]
         );

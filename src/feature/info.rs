@@ -2,7 +2,7 @@
 //! tables that drive counting so the docs cannot drift from behavior.
 
 use crate::code::branch::{BranchKind, BranchRule};
-use crate::code::{java, javascript, kotlin, python, rust, swift};
+use crate::code::{java, javascript, kotlin, python, rust, swift, typescript};
 
 const LANGUAGES: &[(&str, &[BranchRule])] = &[
     ("Java", java::BRANCH_RULES),
@@ -11,6 +11,7 @@ const LANGUAGES: &[(&str, &[BranchRule])] = &[
     ("Python", python::BRANCH_RULES),
     ("Rust", rust::BRANCH_RULES),
     ("Swift", swift::BRANCH_RULES),
+    ("TypeScript", typescript::BRANCH_RULES),
 ];
 
 const CONFIG_EXAMPLE: &str = "\
