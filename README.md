@@ -17,6 +17,7 @@ smell src/main.rs           # a single Rust file
 smell Sources/Shape.swift   # a single Swift file
 smell app/src/main/kotlin   # a directory of Kotlin sources
 smell src/main/java         # a directory of Java sources
+smell services/api          # a directory of Python sources
 ```
 
 ## Example output
@@ -49,5 +50,6 @@ src/shape.rs
 - Java (`.java`)
 - JavaScript (`.js`, `.mjs`, `.cjs`)
 - Kotlin (`.kt`, `.kts`)
+- Python (`.py`)
 - Rust (`.rs`)
 - Swift (`.swift`)

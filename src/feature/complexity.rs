@@ -136,6 +136,8 @@ mod tests {
                 "javascript/inherits.js",
                 "kotlin/complexity.kt",
                 "kotlin/inherits.kt",
+                "python/complexity.py",
+                "python/inherits.py",
                 "rust/complexity.rs",
                 "rust/inherits.rs",
                 "swift/complexity.swift",
@@ -197,6 +199,7 @@ mod tests {
                 "java/Inherits.java",
                 "javascript/inherits.js",
                 "kotlin/inherits.kt",
+                "python/inherits.py",
                 "rust/inherits.rs",
                 "swift/inherits.swift",
             ]
@@ -221,6 +224,7 @@ mod tests {
                 vec!["Circle".to_string(), "Sub".to_string()],
                 vec!["Circle".to_string()],
                 vec!["Circle".to_string(), "Registry".to_string(),],
+                vec!["Circle".to_string(), "Registry".to_string()],
                 vec!["Circle".to_string(), "Marked".to_string()],
                 vec!["Circle".to_string()],
             ]

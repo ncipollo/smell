@@ -2,12 +2,13 @@
 //! tables that drive counting so the docs cannot drift from behavior.
 
 use crate::code::branch::{BranchKind, BranchRule};
-use crate::code::{java, javascript, kotlin, rust, swift};
+use crate::code::{java, javascript, kotlin, python, rust, swift};
 
 const LANGUAGES: &[(&str, &[BranchRule])] = &[
     ("Java", java::BRANCH_RULES),
     ("JavaScript", javascript::BRANCH_RULES),
     ("Kotlin", kotlin::BRANCH_RULES),
+    ("Python", python::BRANCH_RULES),
     ("Rust", rust::BRANCH_RULES),
     ("Swift", swift::BRANCH_RULES),
 ];
