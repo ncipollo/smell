@@ -10,7 +10,7 @@ cargo install smell
 
 ## Usage
 
-Point `smell` at a source file or a directory (searched recursively):
+Point `smell` at one or more source files or directories (directories are searched recursively):
 
 ```sh
 smell src/main.rs           # a single Rust file
@@ -18,7 +18,17 @@ smell Sources/Shape.swift   # a single Swift file
 smell app/src/main/kotlin   # a directory of Kotlin sources
 smell src/main/java         # a directory of Java sources
 smell services/api          # a directory of Python sources
+smell src lib               # multiple paths, merged into one report
 ```
+
+Pass `-` to read newline-separated paths from stdin, e.g. for `git diff` or `xargs` workflows:
+
+```sh
+git diff --name-only | smell -
+git diff --name-only HEAD~1 | smell - --max-complexity 10
+```
+
+Unsupported files (like `README.md` in a `git diff` list) are silently skipped rather than erroring, and explicitly-named files are still subject to `--include`/`--exclude`. A path that can't be read is reported to stderr and the run exits non-zero, but the rest of the paths still get analyzed.
 
 ## Example output
 

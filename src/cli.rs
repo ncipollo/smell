@@ -3,4 +3,5 @@
 
 pub mod complexity;
 pub mod info;
+pub mod paths;
 pub mod router;

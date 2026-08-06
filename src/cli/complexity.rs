@@ -9,10 +9,11 @@ mod json;
 
 use crate::code::{ComplexityRollup, FunctionComplexity};
 use crate::{
-    AnalysisOptions, CheckFailure, FileReport, Overrides, analyze, check, resolve_options,
+    AnalysisOptions, CheckFailure, FileReport, Overrides, PathError, analyze, check,
+    resolve_options,
 };
 
-pub fn run(path: PathBuf, overrides: Overrides, quiet: bool, json: bool) -> ExitCode {
+pub fn run(paths: Vec<PathBuf>, overrides: Overrides, quiet: bool, json: bool) -> ExitCode {
     let options = match options(&overrides) {
         Ok(options) => options,
         Err(error) => {
@@ -20,22 +21,48 @@ pub fn run(path: PathBuf, overrides: Overrides, quiet: bool, json: bool) -> Exit
             return ExitCode::FAILURE;
         }
     };
-    match analyze(&path, &options) {
-        Ok(reports) => emit(&reports, options.max_complexity, quiet, json),
+    let paths = match crate::cli::paths::resolve(paths) {
+        Ok(paths) => paths,
         Err(error) => {
-            eprintln!("error: {}: {error}", path.display());
-            ExitCode::FAILURE
+            eprintln!("error: reading paths from stdin: {error}");
+            return ExitCode::FAILURE;
         }
+    };
+    let analysis = analyze(&paths, &options);
+    if !json {
+        for error in &analysis.errors {
+            eprintln!("error: {}: {}", error.path.display(), error.error);
+        }
+    }
+    let exit = emit(
+        &analysis.reports,
+        &analysis.errors,
+        options.max_complexity,
+        quiet,
+        json,
+    );
+    if analysis.errors.is_empty() {
+        exit
+    } else {
+        ExitCode::FAILURE
     }
 }
 
 /// Renders the analysis in the requested format, running the
 /// --max-complexity check once and sharing its result across both: embedded
 /// in the document for `--json`, or a colored stderr report for the table.
-fn emit(reports: &[FileReport], limit: Option<usize>, quiet: bool, json: bool) -> ExitCode {
+/// Path errors are embedded in the JSON document; for the table they've
+/// already been printed to stderr by the caller.
+fn emit(
+    reports: &[FileReport],
+    errors: &[PathError],
+    limit: Option<usize>,
+    quiet: bool,
+    json: bool,
+) -> ExitCode {
     let failures = limit.map(|limit| check(reports, limit)).unwrap_or_default();
     if json {
-        println!("{}", self::json::render(reports, limit, &failures));
+        println!("{}", self::json::render(reports, limit, &failures, errors));
     } else {
         print!("{}", format_reports(reports, quiet));
         if let Some(limit) = limit

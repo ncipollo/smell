@@ -6,14 +6,20 @@ use serde::Serialize;
 
 use crate::code::{ComplexityRollup, FunctionComplexity, TypeComplexity};
 use crate::feature::complexity::check::FailedFunction;
-use crate::{CheckFailure, FileReport};
+use crate::{CheckFailure, FileReport, PathError};
 
 /// Renders the analysis (and, when a limit is set, the check result) as a
 /// pretty-printed JSON document.
-pub fn render(reports: &[FileReport], limit: Option<usize>, failures: &[CheckFailure]) -> String {
+pub fn render(
+    reports: &[FileReport],
+    limit: Option<usize>,
+    failures: &[CheckFailure],
+    errors: &[PathError],
+) -> String {
     let document = Document {
         files: reports.iter().map(File::new).collect(),
         check: limit.map(|limit| Check::new(limit, failures)),
+        errors: errors.iter().map(Error::new).collect(),
     };
     serde_json::to_string_pretty(&document).expect("DTOs are always representable as JSON")
 }
@@ -23,6 +29,23 @@ struct Document {
     files: Vec<File>,
     #[serde(skip_serializing_if = "Option::is_none")]
     check: Option<Check>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    errors: Vec<Error>,
+}
+
+#[derive(Serialize)]
+struct Error {
+    path: String,
+    message: String,
+}
+
+impl Error {
+    fn new(error: &PathError) -> Self {
+        Error {
+            path: error.path.display().to_string(),
+            message: error.error.to_string(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -145,6 +168,7 @@ impl Failure {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
     use std::path::PathBuf;
 
     use serde_json::{Value, json};
@@ -175,7 +199,7 @@ mod tests {
     }
 
     fn parse(reports: &[FileReport], limit: Option<usize>, failures: &[CheckFailure]) -> Value {
-        serde_json::from_str(&render(reports, limit, failures)).expect("valid json")
+        serde_json::from_str(&render(reports, limit, failures, &[])).expect("valid json")
     }
 
     #[test]
@@ -237,6 +261,28 @@ mod tests {
                     { "path": "src/foo.rs", "functions": [{ "name": "Shape.area", "complexity": 3 }] }
                 ]
             })
+        );
+    }
+
+    #[test]
+    fn errors_are_omitted_when_empty() {
+        let reports = [report_with_functions_and_types()];
+        let document = parse(&reports, None, &[]);
+        assert!(document.get("errors").is_none());
+    }
+
+    #[test]
+    fn errors_are_present_when_a_path_failed() {
+        let reports = [report_with_functions_and_types()];
+        let errors = [PathError {
+            path: PathBuf::from("gone.rs"),
+            error: io::Error::new(io::ErrorKind::NotFound, "No such file or directory"),
+        }];
+        let document: Value =
+            serde_json::from_str(&render(&reports, None, &[], &errors)).expect("valid json");
+        assert_eq!(
+            document["errors"],
+            json!([{ "path": "gone.rs", "message": "No such file or directory" }])
         );
     }
 }
