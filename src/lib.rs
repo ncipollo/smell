@@ -1,7 +1,7 @@
 //! Static code analysis. The `smell` binary is a thin CLI over this library.
 
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub mod cli;
 pub mod code;
@@ -9,17 +9,17 @@ pub mod feature;
 #[cfg(test)]
 mod testing;
 
-pub use feature::complexity::FileReport;
 pub use feature::complexity::check::{CheckFailure, check};
 pub use feature::complexity::options::AnalysisOptions;
 pub use feature::complexity::resolve::Overrides;
+pub use feature::complexity::{Analysis, FileReport, PathError};
 
 use feature::complexity;
 
-/// Analyzes the source files at the given path (a single file or a directory
+/// Analyzes the source files at the given paths (files or directories,
 /// searched recursively) and reports cyclomatic complexity per function.
-pub fn analyze(path: &Path, options: &AnalysisOptions) -> io::Result<Vec<FileReport>> {
-    complexity::analyze(path, options)
+pub fn analyze(paths: &[PathBuf], options: &AnalysisOptions) -> Analysis {
+    complexity::analyze(paths, options)
 }
 
 /// Resolves CLI flags against an optional `smell.toml` in `config_dir` into

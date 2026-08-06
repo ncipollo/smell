@@ -10,10 +10,11 @@ use crate::cli::info;
 #[derive(Parser)]
 #[command(name = "smell", version, about)]
 struct Cli {
-    /// Source file or directory to analyze (Swift, Rust, Kotlin, Java,
-    /// JavaScript, Python; directories are searched recursively).
-    #[arg(required_unless_present = "info")]
-    path: Option<PathBuf>,
+    /// Source files or directories to analyze (Swift, Rust, Kotlin, Java,
+    /// JavaScript, Python, TypeScript; directories are searched recursively).
+    /// Pass `-` to read newline-separated paths from stdin.
+    #[arg(value_name = "PATH", num_args = 1.., required_unless_present = "info")]
+    paths: Vec<PathBuf>,
 
     /// Only analyze files matching this glob (repeatable).
     #[arg(long)]
@@ -59,7 +60,7 @@ struct Cli {
 
 pub fn run() -> ExitCode {
     let Cli {
-        path,
+        paths,
         include,
         exclude,
         branches,
@@ -73,9 +74,8 @@ pub fn run() -> ExitCode {
     if info {
         return info::run();
     }
-    let path = path.expect("clap enforces path unless --info");
     complexity::run(
-        path,
+        paths,
         Overrides {
             include,
             exclude,
@@ -103,7 +103,16 @@ mod tests {
     #[test]
     fn parses_path_argument() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
-        assert_eq!(cli.path, Some(PathBuf::from("src")));
+        assert_eq!(cli.paths, vec![PathBuf::from("src")]);
+    }
+
+    #[test]
+    fn parses_multiple_path_arguments() {
+        let cli = Cli::try_parse_from(["smell", "src", "lib.rs"]).expect("paths should parse");
+        assert_eq!(
+            cli.paths,
+            vec![PathBuf::from("src"), PathBuf::from("lib.rs")]
+        );
     }
 
     #[test]
@@ -172,7 +181,7 @@ mod tests {
     fn info_does_not_require_a_path() {
         let cli = Cli::try_parse_from(["smell", "--info"]).expect("--info should parse");
         assert!(cli.info);
-        assert_eq!(cli.path, None);
+        assert!(cli.paths.is_empty());
     }
 
     #[test]

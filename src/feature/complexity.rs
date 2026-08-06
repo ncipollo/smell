@@ -20,16 +20,69 @@ pub struct FileReport {
     pub complexity: FileComplexity,
 }
 
-/// Analyzes the source files at the given path (a single file or a directory
+/// A path passed to [`analyze`] that couldn't be read.
+pub struct PathError {
+    pub path: PathBuf,
+    pub error: io::Error,
+}
+
+/// The result of analyzing every given path: successful reports plus any
+/// per-path or per-file errors, so one bad path doesn't discard the rest.
+pub struct Analysis {
+    pub reports: Vec<FileReport>,
+    pub errors: Vec<PathError>,
+}
+
+/// Analyzes the source files at the given paths (files or directories,
 /// searched recursively) and reports cyclomatic complexity per function.
-pub fn analyze(path: &Path, options: &AnalysisOptions) -> io::Result<Vec<FileReport>> {
-    let mut files = source_files(path, &options.files)?;
+/// Overlapping paths are deduplicated.
+pub fn analyze(paths: &[PathBuf], options: &AnalysisOptions) -> Analysis {
+    let (files, mut errors) = discover(paths, &options.files);
+    let (mut reports, file_errors) = analyze_files(files, options);
+    errors.extend(file_errors);
+    reports.sort_by(|a, b| a.path.cmp(&b.path));
+    Analysis { reports, errors }
+}
+
+/// Resolves every root to its source files, collecting an error per root that
+/// can't be read rather than aborting the whole run.
+fn discover(paths: &[PathBuf], filter: &FileFilter) -> (Vec<PathBuf>, Vec<PathError>) {
+    let mut files = Vec::new();
+    let mut errors = Vec::new();
+    for path in paths {
+        match source_files(path, filter) {
+            Ok(found) => files.extend(found),
+            Err(error) => errors.push(PathError {
+                path: path.clone(),
+                error,
+            }),
+        }
+    }
     files.sort();
-    let reports = files
+    files.dedup();
+    (files, errors)
+}
+
+/// Analyzes every file, partitioning successes from failures instead of
+/// short-circuiting on the first unreadable file.
+fn analyze_files(
+    files: Vec<PathBuf>,
+    options: &AnalysisOptions,
+) -> (Vec<FileReport>, Vec<PathError>) {
+    let results: Vec<(PathBuf, io::Result<Option<FileReport>>)> = files
         .into_par_iter()
-        .map(|file| analyze_file(file, options))
-        .collect::<io::Result<Vec<_>>>()?;
-    Ok(reports.into_iter().flatten().collect())
+        .map(|file| (file.clone(), analyze_file(file, options)))
+        .collect();
+    let mut reports = Vec::new();
+    let mut errors = Vec::new();
+    for (path, result) in results {
+        match result {
+            Ok(Some(report)) => reports.push(report),
+            Ok(None) => {}
+            Err(error) => errors.push(PathError { path, error }),
+        }
+    }
+    (reports, errors)
 }
 
 /// Analyzes one file; `None` when the type filter leaves nothing to report.
@@ -64,13 +117,24 @@ fn filter_types(complexity: FileComplexity, filter: &TypeFilter) -> Option<FileC
 }
 
 fn source_files(path: &Path, filter: &FileFilter) -> io::Result<Vec<PathBuf>> {
-    // A single explicit file bypasses filters: the user pointed at it directly.
     if path.is_file() {
-        return Ok(vec![path.to_path_buf()]);
+        return Ok(explicit_file(path, filter));
     }
     let mut files = Vec::new();
     collect_files(path, path, filter, &mut files)?;
     Ok(files)
+}
+
+/// An explicitly-named file is included when it's a supported type and
+/// matches the include/exclude filters, same as a file found by directory
+/// search; otherwise it's silently skipped rather than erroring, since
+/// callers may pass mixed lists (e.g. a `git diff` file list).
+fn explicit_file(path: &Path, filter: &FileFilter) -> Vec<PathBuf> {
+    if router::is_supported(path) && filter.matches(path) {
+        vec![path.to_path_buf()]
+    } else {
+        Vec::new()
+    }
 }
 
 fn collect_files(
@@ -115,8 +179,10 @@ mod tests {
 
     #[test]
     fn analyze_reports_all_fixture_files_sorted() {
-        let reports = analyze(&fixtures_dir(), &AnalysisOptions::default()).expect("analyze");
-        let names: Vec<String> = reports
+        let analysis = analyze(&[fixtures_dir()], &AnalysisOptions::default());
+        assert!(analysis.errors.is_empty());
+        let names: Vec<String> = analysis
+            .reports
             .iter()
             .map(|report| {
                 report
@@ -151,7 +217,7 @@ mod tests {
 
     #[test]
     fn analyze_applies_include_globs() {
-        let reports = analyze(&fixtures_dir(), &include(&["*.rs"])).expect("analyze");
+        let reports = analyze(&[fixtures_dir()], &include(&["*.rs"])).reports;
         let names: Vec<String> = reports
             .iter()
             .map(|report| report.path.display().to_string())
@@ -195,7 +261,7 @@ mod tests {
 
     #[test]
     fn analyze_with_implements_reports_only_matching_types() {
-        let reports = analyze(&fixtures_dir(), &implements(&["Describe"])).expect("analyze");
+        let reports = analyze(&[fixtures_dir()], &implements(&["Describe"])).reports;
         assert_eq!(
             relative_names(&reports),
             vec![
@@ -238,7 +304,7 @@ mod tests {
 
     #[test]
     fn analyze_with_implements_matches_trailing_simple_name() {
-        let reports = analyze(&fixtures_dir(), &implements(&["Display"])).expect("analyze");
+        let reports = analyze(&[fixtures_dir()], &implements(&["Display"])).reports;
         assert_eq!(
             relative_names(&reports),
             vec!["rust/complexity.rs", "rust/inherits.rs"]
@@ -248,25 +314,70 @@ mod tests {
     #[test]
     fn analyze_reports_single_file() {
         let path = fixtures_dir().join("swift/complexity.swift");
-        let reports = analyze(&path, &AnalysisOptions::default()).expect("analyze single file");
-        assert_eq!(reports.len(), 1);
-        assert!(!reports[0].complexity.functions.is_empty());
+        let analysis = analyze(&[path], &AnalysisOptions::default());
+        assert!(analysis.errors.is_empty());
+        assert_eq!(analysis.reports.len(), 1);
+        assert!(!analysis.reports[0].complexity.functions.is_empty());
     }
 
     #[test]
-    fn analyze_single_file_bypasses_filters() {
+    fn analyze_single_file_applies_filters() {
         let path = fixtures_dir().join("swift/complexity.swift");
-        let reports = analyze(&path, &include(&["*.rs"])).expect("analyze single file");
-        assert_eq!(reports.len(), 1);
+        let analysis = analyze(&[path], &include(&["*.rs"]));
+        assert!(analysis.errors.is_empty());
+        assert!(analysis.reports.is_empty());
     }
 
     #[test]
-    fn analyze_rejects_unsupported_file() {
+    fn analyze_skips_unsupported_file() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("README.md");
-        let error = match analyze(&path, &AnalysisOptions::default()) {
-            Ok(_) => panic!("unsupported file should error"),
-            Err(error) => error,
-        };
-        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        let analysis = analyze(&[path], &AnalysisOptions::default());
+        assert!(analysis.reports.is_empty());
+        assert!(analysis.errors.is_empty());
+    }
+
+    #[test]
+    fn analyze_merges_multiple_paths() {
+        let paths = vec![
+            fixtures_dir().join("rust"),
+            fixtures_dir().join("swift/complexity.swift"),
+        ];
+        let analysis = analyze(&paths, &AnalysisOptions::default());
+        assert!(analysis.errors.is_empty());
+        assert_eq!(
+            relative_names(&analysis.reports),
+            vec![
+                "rust/complexity.rs",
+                "rust/inherits.rs",
+                "swift/complexity.swift"
+            ]
+        );
+    }
+
+    #[test]
+    fn analyze_dedupes_overlapping_paths() {
+        let file = fixtures_dir().join("rust/complexity.rs");
+        let analysis = analyze(
+            &[fixtures_dir().join("rust"), file],
+            &AnalysisOptions::default(),
+        );
+        assert!(analysis.errors.is_empty());
+        assert_eq!(
+            relative_names(&analysis.reports),
+            vec!["rust/complexity.rs", "rust/inherits.rs"]
+        );
+    }
+
+    #[test]
+    fn analyze_reports_missing_path_but_continues() {
+        let missing = fixtures_dir().join("does-not-exist");
+        let paths = vec![missing.clone(), fixtures_dir().join("rust")];
+        let analysis = analyze(&paths, &AnalysisOptions::default());
+        assert_eq!(analysis.errors.len(), 1);
+        assert_eq!(analysis.errors[0].path, missing);
+        assert_eq!(
+            relative_names(&analysis.reports),
+            vec!["rust/complexity.rs", "rust/inherits.rs"]
+        );
     }
 }
