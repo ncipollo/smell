@@ -10,7 +10,7 @@ use crate::cli::info;
 #[derive(Parser)]
 #[command(name = "smell", version, about)]
 struct Cli {
-    /// Source files or directories to analyze (Swift, Rust, Kotlin, Java,
+    /// Source files or directories to analyze (Swift, Rust, Kotlin, Java, C#,
     /// JavaScript, Python, TypeScript; directories are searched recursively).
     /// Pass `-` to read newline-separated paths from stdin.
     #[arg(value_name = "PATH", num_args = 1.., required_unless_present = "info")]

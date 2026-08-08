@@ -2,10 +2,10 @@ use std::path::Path;
 
 use crate::code::FileComplexity;
 use crate::code::branch::BranchFilter;
-use crate::code::{java, javascript, kotlin, python, rust, swift, typescript};
+use crate::code::{csharp, java, javascript, kotlin, python, rust, swift, typescript};
 
 const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "java", "js", "mjs", "cjs", "kt", "kts", "py", "rs", "swift", "ts", "mts", "cts", "tsx",
+    "cs", "java", "js", "mjs", "cjs", "kt", "kts", "py", "rs", "swift", "ts", "mts", "cts", "tsx",
 ];
 
 pub fn is_supported(path: &Path) -> bool {
@@ -16,6 +16,7 @@ pub fn is_supported(path: &Path) -> bool {
 /// Returns `None` for unsupported file types.
 pub fn file_complexity(path: &Path, source: &str, filter: &BranchFilter) -> Option<FileComplexity> {
     match extension(path)?.as_str() {
+        "cs" => Some(csharp::file_complexity(source, filter)),
         "java" => Some(java::file_complexity(source, filter)),
         "js" | "mjs" | "cjs" => Some(javascript::file_complexity(source, filter)),
         "kt" | "kts" => Some(kotlin::file_complexity(source, filter)),
@@ -51,6 +52,17 @@ mod tests {
     fn is_supported_rejects_other_files() {
         assert!(!is_supported(Path::new("notes.md")));
         assert!(!is_supported(Path::new("no_extension")));
+    }
+
+    #[test]
+    fn file_complexity_routes_csharp() {
+        let complexity = file_complexity(
+            Path::new("file.cs"),
+            "class Shape { int Area() { return 1; } }",
+            &BranchFilter::default(),
+        )
+        .expect("csharp routed");
+        assert_eq!(complexity.types.len(), 1);
     }
 
     #[test]

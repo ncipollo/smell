@@ -3,6 +3,7 @@
 
 pub mod branch;
 mod collector;
+pub mod csharp;
 pub mod java;
 pub mod javascript;
 pub mod kotlin;

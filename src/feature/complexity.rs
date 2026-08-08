@@ -196,6 +196,8 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                "csharp/complexity.cs",
+                "csharp/inherits.cs",
                 "java/Complexity.java",
                 "java/Inherits.java",
                 "javascript/complexity.js",
@@ -265,6 +267,7 @@ mod tests {
         assert_eq!(
             relative_names(&reports),
             vec![
+                "csharp/inherits.cs",
                 "java/Inherits.java",
                 "javascript/inherits.js",
                 "kotlin/inherits.kt",
@@ -291,6 +294,7 @@ mod tests {
         assert_eq!(
             type_names,
             vec![
+                vec!["Circle".to_string(), "Sub".to_string()],
                 vec!["Circle".to_string(), "Sub".to_string()],
                 vec!["Circle".to_string()],
                 vec!["Circle".to_string(), "Registry".to_string(),],

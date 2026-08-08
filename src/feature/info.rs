@@ -2,9 +2,10 @@
 //! tables that drive counting so the docs cannot drift from behavior.
 
 use crate::code::branch::{BranchKind, BranchRule};
-use crate::code::{java, javascript, kotlin, python, rust, swift, typescript};
+use crate::code::{csharp, java, javascript, kotlin, python, rust, swift, typescript};
 
 const LANGUAGES: &[(&str, &[BranchRule])] = &[
+    ("C#", csharp::BRANCH_RULES),
     ("Java", java::BRANCH_RULES),
     ("JavaScript", javascript::BRANCH_RULES),
     ("Kotlin", kotlin::BRANCH_RULES),
