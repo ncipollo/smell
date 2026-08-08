@@ -70,6 +70,7 @@ CLI flags override a matched rule's fields entirely rather than merging with the
 
 ## Supported languages
 
+- C# (`.cs`)
 - Java (`.java`)
 - JavaScript (`.js`, `.mjs`, `.cjs`)
 - Kotlin (`.kt`, `.kts`)
