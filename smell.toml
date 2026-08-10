@@ -1,0 +1,5 @@
+[[rule]]
+name = "default"
+include = ["*.rs"]
+exclude = ["fixtures/**"]
+max_complexity = 15
