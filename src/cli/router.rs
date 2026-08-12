@@ -49,6 +49,11 @@ struct Cli {
     #[arg(long, value_name = "N")]
     max_lines: Option<usize>,
 
+    /// Fail (exit non-zero) if any file's declaration count exceeds this
+    /// limit, listing the offending files (see --info).
+    #[arg(long, value_name = "N")]
+    max_declarations: Option<usize>,
+
     /// Use the named rule from smell.toml instead of the "default" rule.
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
@@ -78,6 +83,7 @@ pub fn run() -> ExitCode {
         max_complexity,
         max_methods,
         max_lines,
+        max_declarations,
         rule,
         quiet,
         json,
@@ -96,6 +102,7 @@ pub fn run() -> ExitCode {
             max_complexity,
             max_methods,
             max_lines,
+            max_declarations,
             rule,
         },
         quiet,
@@ -215,6 +222,19 @@ mod tests {
     fn max_lines_defaults_to_none() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert_eq!(cli.max_lines, None);
+    }
+
+    #[test]
+    fn parses_max_declarations() {
+        let cli = Cli::try_parse_from(["smell", "src", "--max-declarations", "20"])
+            .expect("max declarations should parse");
+        assert_eq!(cli.max_declarations, Some(20));
+    }
+
+    #[test]
+    fn max_declarations_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.max_declarations, None);
     }
 
     #[test]

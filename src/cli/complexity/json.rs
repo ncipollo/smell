@@ -47,6 +47,7 @@ impl Error {
 struct File {
     path: String,
     lines: usize,
+    declarations: usize,
     types: Vec<Type>,
     functions: Vec<Function>,
     rollup: Rollup,
@@ -57,6 +58,7 @@ impl File {
         File {
             path: report.path.display().to_string(),
             lines: report.lines,
+            declarations: report.complexity.declarations(),
             types: report.complexity.types.iter().map(Type::new).collect(),
             functions: report
                 .complexity
@@ -141,6 +143,8 @@ struct Check {
     methods: Option<MethodsCheck>,
     #[serde(skip_serializing_if = "Option::is_none")]
     lines: Option<LinesCheck>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    declarations: Option<DeclarationsCheck>,
 }
 
 impl Check {
@@ -160,10 +164,15 @@ impl Check {
             .iter()
             .find(|result| result.measure == Measure::Lines)
             .map(LinesCheck::new);
+        let declarations = results
+            .iter()
+            .find(|result| result.measure == Measure::Declarations)
+            .map(DeclarationsCheck::new);
         Some(Check {
             complexity,
             methods,
             lines,
+            declarations,
         })
     }
 }
@@ -286,6 +295,43 @@ impl LinesFailure {
     }
 }
 
+#[derive(Serialize)]
+struct DeclarationsCheck {
+    limit: usize,
+    failures: Vec<DeclarationsFailure>,
+}
+
+impl DeclarationsCheck {
+    fn new(result: &CheckResult) -> Self {
+        DeclarationsCheck {
+            limit: result.limit,
+            failures: result
+                .failures
+                .iter()
+                .map(DeclarationsFailure::new)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct DeclarationsFailure {
+    path: String,
+    declarations: usize,
+}
+
+impl DeclarationsFailure {
+    fn new(failure: &CheckFailure) -> Self {
+        let Subject::File(declarations) = &failure.subject else {
+            unreachable!("a Measure::Declarations result only ever produces a File subject")
+        };
+        DeclarationsFailure {
+            path: failure.path.display().to_string(),
+            declarations: *declarations,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io;
@@ -343,6 +389,7 @@ mod tests {
         let file = &document["files"][0];
         assert_eq!(file["path"], "src/foo.rs");
         assert_eq!(file["lines"], 42);
+        assert_eq!(file["declarations"], 2);
         assert_eq!(
             file["functions"],
             json!([{ "name": "top_level", "complexity": 1 }])
@@ -458,6 +505,29 @@ mod tests {
     }
 
     #[test]
+    fn declarations_check_uses_path_and_declarations_fields() {
+        let reports = [report_with_functions_and_types()];
+        let results = [CheckResult {
+            measure: Measure::Declarations,
+            limit: 3,
+            failures: vec![CheckFailure {
+                path: PathBuf::from("src/foo.rs"),
+                subject: Subject::File(4),
+            }],
+        }];
+        let document = parse(&reports, &results);
+        assert_eq!(
+            document["check"],
+            json!({
+                "declarations": {
+                    "limit": 3,
+                    "failures": [{ "path": "src/foo.rs", "declarations": 4 }]
+                }
+            })
+        );
+    }
+
+    #[test]
     fn all_measures_are_present_when_all_are_configured() {
         let reports = [report_with_functions_and_types()];
         let results = [
@@ -476,11 +546,17 @@ mod tests {
                 limit: 100,
                 failures: vec![],
             },
+            CheckResult {
+                measure: Measure::Declarations,
+                limit: 20,
+                failures: vec![],
+            },
         ];
         let document = parse(&reports, &results);
         assert!(document["check"]["complexity"].is_object());
         assert!(document["check"]["methods"].is_object());
         assert!(document["check"]["lines"].is_object());
+        assert!(document["check"]["declarations"].is_object());
     }
 
     #[test]

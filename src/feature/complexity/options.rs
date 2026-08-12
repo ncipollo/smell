@@ -16,4 +16,6 @@ pub struct AnalysisOptions {
     pub max_methods: Option<usize>,
     /// When set, any file with more lines than this fails the run.
     pub max_lines: Option<usize>,
+    /// When set, any file with more declarations than this fails the run.
+    pub max_declarations: Option<usize>,
 }

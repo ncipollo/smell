@@ -18,6 +18,7 @@ pub struct Overrides {
     pub max_complexity: Option<usize>,
     pub max_methods: Option<usize>,
     pub max_lines: Option<usize>,
+    pub max_declarations: Option<usize>,
     pub rule: Option<String>,
 }
 
@@ -45,6 +46,7 @@ fn merge(config: Option<Config>, overrides: &Overrides, dir: &Path) -> io::Resul
         max_complexity: overrides.max_complexity.or(rule.max_complexity),
         max_methods: overrides.max_methods.or(rule.max_methods),
         max_lines: overrides.max_lines.or(rule.max_lines),
+        max_declarations: overrides.max_declarations.or(rule.max_declarations),
     })
 }
 
@@ -342,6 +344,30 @@ mod tests {
         };
         let options = merge(Some(config), &overrides, &dir()).expect("resolves");
         assert_eq!(options.max_lines, Some(100));
+    }
+
+    #[test]
+    fn no_config_no_flags_sets_no_declarations_limit() {
+        let options = merge(None, &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_declarations, None);
+    }
+
+    #[test]
+    fn rule_max_declarations_applies() {
+        let config = config_from("[[rule]]\nmax_declarations = 5\n");
+        let options = merge(Some(config), &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_declarations, Some(5));
+    }
+
+    #[test]
+    fn flag_max_declarations_replaces_rule_max_declarations() {
+        let config = config_from("[[rule]]\nmax_declarations = 5\n");
+        let overrides = Overrides {
+            max_declarations: Some(2),
+            ..Overrides::default()
+        };
+        let options = merge(Some(config), &overrides, &dir()).expect("resolves");
+        assert_eq!(options.max_declarations, Some(2));
     }
 
     #[test]

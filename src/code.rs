@@ -57,6 +57,11 @@ impl FileComplexity {
         let type_functions = self.types.iter().flat_map(|t| t.functions.iter());
         rollup(self.functions.iter().chain(type_functions))
     }
+
+    /// Top-level declarations: types plus top-level functions.
+    pub fn declarations(&self) -> usize {
+        self.types.len() + self.functions.len()
+    }
 }
 
 fn rollup<'a>(functions: impl Iterator<Item = &'a FunctionComplexity>) -> ComplexityRollup {
@@ -125,5 +130,27 @@ mod tests {
         assert_eq!(rollup.total, 12);
         assert_eq!(rollup.max, 7);
         assert_eq!(rollup.average, 4.0);
+    }
+
+    #[test]
+    fn declarations_counts_types_plus_top_level_functions() {
+        let complexity = FileComplexity {
+            functions: vec![function("top", 1), function("other", 1)],
+            types: vec![TypeComplexity {
+                name: "Shape".to_string(),
+                supertypes: Vec::new(),
+                functions: vec![function("area", 1)],
+            }],
+        };
+        assert_eq!(complexity.declarations(), 3);
+    }
+
+    #[test]
+    fn declarations_of_empty_file_is_zero() {
+        let complexity = FileComplexity {
+            functions: Vec::new(),
+            types: Vec::new(),
+        };
+        assert_eq!(complexity.declarations(), 0);
     }
 }

@@ -136,6 +136,7 @@ fn label(measure: Measure) -> &'static str {
         Measure::Complexity => "complexity",
         Measure::Methods => "method count",
         Measure::Lines => "line count",
+        Measure::Declarations => "declaration count",
     }
 }
 
@@ -163,14 +164,14 @@ fn format_reports(reports: &[FileReport], quiet: bool) -> String {
     reports.iter().map(format_file).collect()
 }
 
-/// The extra rollup figure shown alongside a group's row: a type's method
-/// count or the file's line count. Mutually exclusive, since a group is
-/// never both.
+/// The extra rollup figure(s) shown alongside a group's row: a type's method
+/// count, or the file's line and declaration counts together (a file is
+/// never a `Methods` row and a type is never a `File` row).
 #[derive(Clone, Copy)]
 enum Extra {
     None,
     Methods(usize),
-    Lines(usize),
+    File { lines: usize, declarations: usize },
 }
 
 fn format_file(report: &FileReport) -> String {
@@ -199,7 +200,10 @@ fn format_file(report: &FileReport) -> String {
         &mut table,
         "file",
         &report.complexity.rollup(),
-        Extra::Lines(report.lines),
+        Extra::File {
+            lines: report.lines,
+            declarations: report.complexity.declarations(),
+        },
     );
     text.push_str(&format!("{table}\n\n"));
     text
@@ -236,7 +240,12 @@ fn format_rollup(rollup: &ComplexityRollup, extra: Extra) -> String {
     match extra {
         Extra::None => base,
         Extra::Methods(count) => format!("{base} · methods {count}"),
-        Extra::Lines(count) => format!("{base} · lines {count}"),
+        Extra::File {
+            lines,
+            declarations,
+        } => {
+            format!("{base} · lines {lines} · decls {declarations}")
+        }
     }
 }
 
@@ -338,6 +347,20 @@ mod tests {
     }
 
     #[test]
+    fn format_results_uses_the_declaration_count_label() {
+        let result = CheckResult {
+            measure: Measure::Declarations,
+            limit: 5,
+            failures: vec![CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                subject: Subject::File(6),
+            }],
+        };
+        let text = format_results(&[result], false);
+        assert!(text.starts_with("✗ declaration count check failed: 1 file(s) exceed limit 5\n"));
+    }
+
+    #[test]
     fn format_result_renders_a_file_subject_as_a_flat_line() {
         let result = lines_result(vec![CheckFailure {
             path: PathBuf::from("src/a.rs"),
@@ -409,6 +432,16 @@ mod tests {
             .find(|line| line.contains("file"))
             .expect("file rollup row");
         assert!(file_line.contains("lines 42"));
+    }
+
+    #[test]
+    fn format_reports_shows_declaration_count_on_the_file_row() {
+        let text = format_reports(&sample_reports(), false);
+        let file_line = text
+            .lines()
+            .find(|line| line.contains("file"))
+            .expect("file rollup row");
+        assert!(file_line.contains("decls 1"));
     }
 
     #[test]
