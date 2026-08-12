@@ -25,6 +25,7 @@ implements = [\"Labeled\"]
 max_complexity = 10
 max_methods = 8
 max_lines = 300
+max_declarations = 20
 ";
 
 /// Renders the full vocabulary documentation: friendly branch kinds, the
@@ -126,14 +127,16 @@ fn implements_section() -> String {
 fn limit_section() -> String {
     String::from(
         "LIMIT CHECKS\n\
-         --max-complexity <N>, --max-methods <N>, and --max-lines <N> (or\n\
-         max_complexity/max_methods/max_lines in smell.toml) each make the\n\
-         run a check for their measure: complexity per function, method\n\
-         count per type, line count per file. A check exits non-zero when\n\
-         any analyzed subject's value is strictly greater than N (equal to\n\
-         N passes), printing the offending files and subjects to stderr\n\
-         after the normal report, one section per failing measure. Every\n\
-         check covers whatever the other filters selected and runs\n\
+         --max-complexity <N>, --max-methods <N>, --max-lines <N>, and\n\
+         --max-declarations <N> (or max_complexity/max_methods/max_lines/\n\
+         max_declarations in smell.toml) each make the run a check for\n\
+         their measure: complexity per function, method count per type,\n\
+         line count per file, declaration count per file (types plus\n\
+         top-level functions). A check exits non-zero when any analyzed\n\
+         subject's value is strictly greater than N (equal to N passes),\n\
+         printing the offending files and subjects to stderr after the\n\
+         normal report, one section per failing measure. Every check\n\
+         covers whatever the other filters selected and runs\n\
          independently: any combination may be configured. Without a\n\
          limit, smell only reports and always exits zero on success.\n",
     )
@@ -143,10 +146,10 @@ fn quiet_section() -> String {
     String::from(
         "QUIET MODE\n\
          --quiet (or -q) suppresses the per-file complexity report on\n\
-         stdout. Errors and, when --max-complexity, --max-methods, or\n\
-         --max-lines is set, the failure report on stderr are still\n\
-         printed, so a quiet CI run stays silent on success and prints\n\
-         only what a failure requires.\n",
+         stdout. Errors and, when --max-complexity, --max-methods,\n\
+         --max-lines, or --max-declarations is set, the failure report on\n\
+         stderr are still printed, so a quiet CI run stays silent on success\n\
+         and prints only what a failure requires.\n",
     )
 }
 
@@ -159,8 +162,9 @@ fn config_section() -> String {
          used if present, else the built-in defaults (a config file's mere\n\
          presence does not change a bare `smell <path>` invocation). Explicit\n\
          --include/--exclude/--branches/--implements/--max-complexity/\n\
-         --max-methods/--max-lines flags replace a rule's value for that\n\
-         field entirely rather than merging with it.\n\n{CONFIG_EXAMPLE}"
+         --max-methods/--max-lines/--max-declarations flags replace a\n\
+         rule's value for that field entirely rather than merging with\n\
+         it.\n\n{CONFIG_EXAMPLE}"
     )
 }
 
@@ -250,6 +254,12 @@ mod tests {
     fn text_documents_max_lines() {
         let text = text();
         assert!(text.contains("--max-lines"));
+    }
+
+    #[test]
+    fn text_documents_max_declarations() {
+        let text = text();
+        assert!(text.contains("--max-declarations"));
     }
 
     #[test]

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::feature::complexity::FileReport;
 use crate::feature::complexity::options::AnalysisOptions;
 
+mod declaration_count;
 mod file_lines;
 mod function_complexity;
 mod method_count;
@@ -19,6 +20,7 @@ pub enum Measure {
     Complexity,
     Methods,
     Lines,
+    Declarations,
 }
 
 /// A named subject inside a file that exceeded the limit: a function for
@@ -73,6 +75,7 @@ pub fn check(reports: &[FileReport], options: &AnalysisOptions) -> Vec<CheckResu
         (Measure::Complexity, options.max_complexity),
         (Measure::Methods, options.max_methods),
         (Measure::Lines, options.max_lines),
+        (Measure::Declarations, options.max_declarations),
     ];
     configured
         .into_iter()
@@ -85,6 +88,7 @@ fn result(reports: &[FileReport], measure: Measure, limit: usize) -> CheckResult
         Measure::Complexity => function_complexity::failures(reports, limit),
         Measure::Methods => method_count::failures(reports, limit),
         Measure::Lines => file_lines::failures(reports, limit),
+        Measure::Declarations => declaration_count::failures(reports, limit),
     };
     CheckResult {
         measure,
@@ -138,13 +142,15 @@ mod tests {
             max_complexity: Some(5),
             max_methods: Some(2),
             max_lines: Some(100),
+            max_declarations: Some(3),
             ..AnalysisOptions::default()
         };
         let results = check(&reports, &options);
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 4);
         assert_eq!(results[0].measure, Measure::Complexity);
         assert_eq!(results[1].measure, Measure::Methods);
         assert_eq!(results[2].measure, Measure::Lines);
+        assert_eq!(results[3].measure, Measure::Declarations);
     }
 
     #[test]

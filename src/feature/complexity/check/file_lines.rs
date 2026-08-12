@@ -5,17 +5,11 @@
 //! no `FileReport` at all) is not line-checked either, same as method count.
 
 use crate::feature::complexity::FileReport;
-use crate::feature::complexity::check::{CheckFailure, Subject};
+use crate::feature::complexity::check::CheckFailure;
+use crate::feature::complexity::check::scope;
 
 pub fn failures(reports: &[FileReport], limit: usize) -> Vec<CheckFailure> {
-    reports
-        .iter()
-        .filter(|report| report.lines > limit)
-        .map(|report| CheckFailure {
-            path: report.path.clone(),
-            subject: Subject::File(report.lines),
-        })
-        .collect()
+    scope::file(reports, limit, |report| report.lines)
 }
 
 #[cfg(test)]
@@ -24,6 +18,7 @@ mod tests {
 
     use super::*;
     use crate::code::FileComplexity;
+    use crate::feature::complexity::check::Subject;
 
     fn report(path: &str, lines: usize) -> FileReport {
         FileReport {

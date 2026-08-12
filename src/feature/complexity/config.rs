@@ -35,6 +35,8 @@ pub struct RuleConfig {
     pub max_methods: Option<usize>,
     #[serde(default)]
     pub max_lines: Option<usize>,
+    #[serde(default)]
+    pub max_declarations: Option<usize>,
 }
 
 fn default_rule_name() -> String {
@@ -52,6 +54,7 @@ impl Default for RuleConfig {
             max_complexity: None,
             max_methods: None,
             max_lines: None,
+            max_declarations: None,
         }
     }
 }
@@ -120,6 +123,7 @@ mod tests {
         assert_eq!(rule.max_complexity, None);
         assert_eq!(rule.max_methods, None);
         assert_eq!(rule.max_lines, None);
+        assert_eq!(rule.max_declarations, None);
     }
 
     #[test]
@@ -132,7 +136,8 @@ mod tests {
                      implements = [\"Labeled\"]\n\
                      max_complexity = 10\n\
                      max_methods = 8\n\
-                     max_lines = 300\n";
+                     max_lines = 300\n\
+                     max_declarations = 20\n";
         let config = parse(text, &path()).expect("valid config");
         let rule = &config.rules[0];
         assert_eq!(rule.name, "swift");
@@ -143,6 +148,7 @@ mod tests {
         assert_eq!(rule.max_complexity, Some(10));
         assert_eq!(rule.max_methods, Some(8));
         assert_eq!(rule.max_lines, Some(300));
+        assert_eq!(rule.max_declarations, Some(20));
     }
 
     #[test]
