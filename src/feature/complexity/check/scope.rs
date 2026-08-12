@@ -4,7 +4,7 @@
 
 use crate::code::FileComplexity;
 use crate::feature::complexity::FileReport;
-use crate::feature::complexity::check::{CheckFailure, Offender};
+use crate::feature::complexity::check::{CheckFailure, Offender, Subject};
 
 pub fn entries(
     reports: &[FileReport],
@@ -23,7 +23,7 @@ pub fn entries(
             } else {
                 Some(CheckFailure {
                     path: report.path.clone(),
-                    offenders: over,
+                    subject: Subject::Entries(over),
                 })
             }
         })

@@ -9,8 +9,8 @@ mod json;
 
 use crate::code::{ComplexityRollup, FunctionComplexity};
 use crate::{
-    AnalysisOptions, CheckResult, FileReport, Measure, Overrides, PathError, analyze, check,
-    resolve_options,
+    AnalysisOptions, CheckFailure, CheckResult, FileReport, Measure, Overrides, PathError, Subject,
+    analyze, check, resolve_options,
 };
 
 pub fn run(paths: Vec<PathBuf>, overrides: Overrides, quiet: bool, json: bool) -> ExitCode {
@@ -100,16 +100,33 @@ fn format_result(result: &CheckResult, color: bool) -> String {
     let mut text = paint(&header, color);
     text.push('\n');
     for failure in &result.failures {
-        text.push_str(&format!("{}\n", failure.path.display()));
-        for offender in &failure.offenders {
-            text.push_str(&format!(
-                "  {}  {}\n",
-                offender.name,
-                paint(&offender.value.to_string(), color)
-            ));
-        }
+        text.push_str(&format_failure(failure, color));
     }
     text
+}
+
+/// A file-level failure (line count) is one flat `path  value` line; an
+/// entry-scoped failure (complexity, method count) lists its named offenders
+/// indented beneath the path.
+fn format_failure(failure: &CheckFailure, color: bool) -> String {
+    match &failure.subject {
+        Subject::File(value) => format!(
+            "{}  {}\n",
+            failure.path.display(),
+            paint(&value.to_string(), color)
+        ),
+        Subject::Entries(offenders) => {
+            let mut text = format!("{}\n", failure.path.display());
+            for offender in offenders {
+                text.push_str(&format!(
+                    "  {}  {}\n",
+                    offender.name,
+                    paint(&offender.value.to_string(), color)
+                ));
+            }
+            text
+        }
+    }
 }
 
 /// User-facing wording for a measure's stderr header. Kept in `cli` since
@@ -118,6 +135,7 @@ fn label(measure: Measure) -> &'static str {
     match measure {
         Measure::Complexity => "complexity",
         Measure::Methods => "method count",
+        Measure::Lines => "line count",
     }
 }
 
@@ -145,6 +163,16 @@ fn format_reports(reports: &[FileReport], quiet: bool) -> String {
     reports.iter().map(format_file).collect()
 }
 
+/// The extra rollup figure shown alongside a group's row: a type's method
+/// count or the file's line count. Mutually exclusive, since a group is
+/// never both.
+#[derive(Clone, Copy)]
+enum Extra {
+    None,
+    Methods(usize),
+    Lines(usize),
+}
+
 fn format_file(report: &FileReport) -> String {
     let mut text = format!("{}\n", report.path.display());
     let mut table = Table::new();
@@ -155,7 +183,7 @@ fn format_file(report: &FileReport) -> String {
             &complexity_type.name,
             &complexity_type.functions,
             &complexity_type.rollup(),
-            Some(complexity_type.functions.len()),
+            Extra::Methods(complexity_type.functions.len()),
         );
     }
     if !report.complexity.functions.is_empty() {
@@ -164,10 +192,15 @@ fn format_file(report: &FileReport) -> String {
             "(top-level)",
             &report.complexity.functions,
             &ComplexityRollup::of(&report.complexity.functions),
-            None,
+            Extra::None,
         );
     }
-    add_rollup_row(&mut table, "file", &report.complexity.rollup(), None);
+    add_rollup_row(
+        &mut table,
+        "file",
+        &report.complexity.rollup(),
+        Extra::Lines(report.lines),
+    );
     text.push_str(&format!("{table}\n\n"));
     text
 }
@@ -177,9 +210,9 @@ fn add_group_rows(
     name: &str,
     functions: &[FunctionComplexity],
     rollup: &ComplexityRollup,
-    methods: Option<usize>,
+    extra: Extra,
 ) {
-    add_rollup_row(table, name, rollup, methods);
+    add_rollup_row(table, name, rollup, extra);
     for function in functions {
         table.add_row([
             format!("  {}", function.name),
@@ -188,26 +221,22 @@ fn add_group_rows(
     }
 }
 
-fn add_rollup_row(
-    table: &mut Table,
-    name: &str,
-    rollup: &ComplexityRollup,
-    methods: Option<usize>,
-) {
+fn add_rollup_row(table: &mut Table, name: &str, rollup: &ComplexityRollup, extra: Extra) {
     table.add_row([
         Cell::new(name).add_attribute(Attribute::Bold),
-        Cell::new(format_rollup(rollup, methods)).add_attribute(Attribute::Bold),
+        Cell::new(format_rollup(rollup, extra)).add_attribute(Attribute::Bold),
     ]);
 }
 
-fn format_rollup(rollup: &ComplexityRollup, methods: Option<usize>) -> String {
+fn format_rollup(rollup: &ComplexityRollup, extra: Extra) -> String {
     let base = format!(
         "total {} · max {} · avg {:.1}",
         rollup.total, rollup.max, rollup.average
     );
-    match methods {
-        Some(count) => format!("{base} · methods {count}"),
-        None => base,
+    match extra {
+        Extra::None => base,
+        Extra::Methods(count) => format!("{base} · methods {count}"),
+        Extra::Lines(count) => format!("{base} · lines {count}"),
     }
 }
 
@@ -224,16 +253,17 @@ mod tests {
         }
     }
 
+    fn entries_failure(path: &str, offenders: Vec<Offender>) -> CheckFailure {
+        CheckFailure {
+            path: PathBuf::from(path),
+            subject: Subject::Entries(offenders),
+        }
+    }
+
     fn complexity_failures() -> Vec<CheckFailure> {
         vec![
-            CheckFailure {
-                path: PathBuf::from("src/a.rs"),
-                offenders: vec![offender("Shape.area", 12)],
-            },
-            CheckFailure {
-                path: PathBuf::from("src/b.rs"),
-                offenders: vec![offender("top", 11)],
-            },
+            entries_failure("src/a.rs", vec![offender("Shape.area", 12)]),
+            entries_failure("src/b.rs", vec![offender("top", 11)]),
         ]
     }
 
@@ -249,6 +279,14 @@ mod tests {
         CheckResult {
             measure: Measure::Methods,
             limit: 5,
+            failures,
+        }
+    }
+
+    fn lines_result(failures: Vec<CheckFailure>) -> CheckResult {
+        CheckResult {
+            measure: Measure::Lines,
+            limit: 100,
             failures,
         }
     }
@@ -281,22 +319,44 @@ mod tests {
 
     #[test]
     fn format_results_uses_the_method_count_label() {
-        let result = methods_result(vec![CheckFailure {
-            path: PathBuf::from("src/a.rs"),
-            offenders: vec![offender("Shape", 8)],
-        }]);
+        let result = methods_result(vec![entries_failure(
+            "src/a.rs",
+            vec![offender("Shape", 8)],
+        )]);
         let text = format_results(&[result], false);
         assert!(text.starts_with("✗ method count check failed: 1 file(s) exceed limit 5\n"));
+    }
+
+    #[test]
+    fn format_results_uses_the_line_count_label() {
+        let result = lines_result(vec![CheckFailure {
+            path: PathBuf::from("src/a.rs"),
+            subject: Subject::File(150),
+        }]);
+        let text = format_results(&[result], false);
+        assert!(text.starts_with("✗ line count check failed: 1 file(s) exceed limit 100\n"));
+    }
+
+    #[test]
+    fn format_result_renders_a_file_subject_as_a_flat_line() {
+        let result = lines_result(vec![CheckFailure {
+            path: PathBuf::from("src/a.rs"),
+            subject: Subject::File(150),
+        }]);
+        assert_eq!(
+            format_result(&result, false),
+            "✗ line count check failed: 1 file(s) exceed limit 100\nsrc/a.rs  150\n"
+        );
     }
 
     #[test]
     fn format_results_joins_multiple_failing_measures_with_a_blank_line() {
         let results = [
             complexity_result(complexity_failures()),
-            methods_result(vec![CheckFailure {
-                path: PathBuf::from("src/a.rs"),
-                offenders: vec![offender("Shape", 8)],
-            }]),
+            methods_result(vec![entries_failure(
+                "src/a.rs",
+                vec![offender("Shape", 8)],
+            )]),
         ];
         let text = format_results(&results, false);
         assert!(text.contains("✗ complexity check failed"));
@@ -318,6 +378,7 @@ mod tests {
     fn sample_reports() -> Vec<FileReport> {
         vec![FileReport {
             path: PathBuf::from("src/a.rs"),
+            lines: 42,
             complexity: FileComplexity {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),
@@ -341,9 +402,20 @@ mod tests {
     }
 
     #[test]
+    fn format_reports_shows_line_count_on_the_file_row() {
+        let text = format_reports(&sample_reports(), false);
+        let file_line = text
+            .lines()
+            .find(|line| line.contains("file"))
+            .expect("file rollup row");
+        assert!(file_line.contains("lines 42"));
+    }
+
+    #[test]
     fn format_reports_shows_method_count_on_type_rows_only() {
         let reports = vec![FileReport {
             path: PathBuf::from("src/a.rs"),
+            lines: 10,
             complexity: FileComplexity {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),

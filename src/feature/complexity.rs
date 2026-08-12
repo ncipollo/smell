@@ -17,6 +17,7 @@ pub mod router;
 
 pub struct FileReport {
     pub path: PathBuf,
+    pub lines: usize,
     pub complexity: FileComplexity,
 }
 
@@ -88,13 +89,20 @@ fn analyze_files(
 /// Analyzes one file; `None` when the type filter leaves nothing to report.
 fn analyze_file(path: PathBuf, options: &AnalysisOptions) -> io::Result<Option<FileReport>> {
     let source = fs::read_to_string(&path)?;
+    let lines = source.lines().count();
     let Some(complexity) = router::file_complexity(&path, &source, &options.branches) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("unsupported file type: {}", path.display()),
         ));
     };
-    Ok(filter_types(complexity, &options.types).map(|complexity| FileReport { path, complexity }))
+    Ok(
+        filter_types(complexity, &options.types).map(|complexity| FileReport {
+            path,
+            lines,
+            complexity,
+        }),
+    )
 }
 
 /// Retains only types whose supertypes match the filter. Top-level functions

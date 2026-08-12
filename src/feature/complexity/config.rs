@@ -33,6 +33,8 @@ pub struct RuleConfig {
     pub max_complexity: Option<usize>,
     #[serde(default)]
     pub max_methods: Option<usize>,
+    #[serde(default)]
+    pub max_lines: Option<usize>,
 }
 
 fn default_rule_name() -> String {
@@ -49,6 +51,7 @@ impl Default for RuleConfig {
             implements: Vec::new(),
             max_complexity: None,
             max_methods: None,
+            max_lines: None,
         }
     }
 }
@@ -116,6 +119,7 @@ mod tests {
         assert!(rule.implements.is_empty());
         assert_eq!(rule.max_complexity, None);
         assert_eq!(rule.max_methods, None);
+        assert_eq!(rule.max_lines, None);
     }
 
     #[test]
@@ -127,7 +131,8 @@ mod tests {
                      branches = [\"switch\"]\n\
                      implements = [\"Labeled\"]\n\
                      max_complexity = 10\n\
-                     max_methods = 8\n";
+                     max_methods = 8\n\
+                     max_lines = 300\n";
         let config = parse(text, &path()).expect("valid config");
         let rule = &config.rules[0];
         assert_eq!(rule.name, "swift");
@@ -137,6 +142,7 @@ mod tests {
         assert_eq!(rule.implements, vec!["Labeled"]);
         assert_eq!(rule.max_complexity, Some(10));
         assert_eq!(rule.max_methods, Some(8));
+        assert_eq!(rule.max_lines, Some(300));
     }
 
     #[test]

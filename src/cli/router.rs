@@ -44,17 +44,22 @@ struct Cli {
     #[arg(long, value_name = "N")]
     max_methods: Option<usize>,
 
+    /// Fail (exit non-zero) if any file's line count exceeds this limit,
+    /// listing the offending files (see --info).
+    #[arg(long, value_name = "N")]
+    max_lines: Option<usize>,
+
     /// Use the named rule from smell.toml instead of the "default" rule.
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
 
-    /// Suppress the per-file complexity report; errors and --max-complexity
+    /// Suppress the per-file complexity report; errors and any --max-*
     /// failures are still printed.
     #[arg(short, long)]
     quiet: bool,
 
-    /// Print the analysis as JSON instead of the table report; the
-    /// --max-complexity check result is embedded in the document.
+    /// Print the analysis as JSON instead of the table report; any
+    /// configured --max-* check result is embedded in the document.
     #[arg(long, conflicts_with = "quiet")]
     json: bool,
 
@@ -72,6 +77,7 @@ pub fn run() -> ExitCode {
         implements,
         max_complexity,
         max_methods,
+        max_lines,
         rule,
         quiet,
         json,
@@ -89,6 +95,7 @@ pub fn run() -> ExitCode {
             implements,
             max_complexity,
             max_methods,
+            max_lines,
             rule,
         },
         quiet,
@@ -195,6 +202,19 @@ mod tests {
     fn max_methods_defaults_to_none() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert_eq!(cli.max_methods, None);
+    }
+
+    #[test]
+    fn parses_max_lines() {
+        let cli = Cli::try_parse_from(["smell", "src", "--max-lines", "300"])
+            .expect("max lines should parse");
+        assert_eq!(cli.max_lines, Some(300));
+    }
+
+    #[test]
+    fn max_lines_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.max_lines, None);
     }
 
     #[test]

@@ -14,4 +14,6 @@ pub struct AnalysisOptions {
     pub max_complexity: Option<usize>,
     /// When set, any type with more methods than this fails the run.
     pub max_methods: Option<usize>,
+    /// When set, any file with more lines than this fails the run.
+    pub max_lines: Option<usize>,
 }

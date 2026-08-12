@@ -3,3 +3,4 @@ name = "default"
 include = ["*.rs"]
 exclude = ["fixtures/**"]
 max_complexity = 15
+max_lines = 600

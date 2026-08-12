@@ -17,6 +17,7 @@ pub struct Overrides {
     pub implements: Vec<String>,
     pub max_complexity: Option<usize>,
     pub max_methods: Option<usize>,
+    pub max_lines: Option<usize>,
     pub rule: Option<String>,
 }
 
@@ -43,6 +44,7 @@ fn merge(config: Option<Config>, overrides: &Overrides, dir: &Path) -> io::Resul
         branches: BranchFilter::from_specs(&specs),
         max_complexity: overrides.max_complexity.or(rule.max_complexity),
         max_methods: overrides.max_methods.or(rule.max_methods),
+        max_lines: overrides.max_lines.or(rule.max_lines),
     })
 }
 
@@ -316,6 +318,30 @@ mod tests {
         };
         let options = merge(Some(config), &overrides, &dir()).expect("resolves");
         assert_eq!(options.max_methods, Some(3));
+    }
+
+    #[test]
+    fn no_config_no_flags_sets_no_lines_limit() {
+        let options = merge(None, &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_lines, None);
+    }
+
+    #[test]
+    fn rule_max_lines_applies() {
+        let config = config_from("[[rule]]\nmax_lines = 300\n");
+        let options = merge(Some(config), &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_lines, Some(300));
+    }
+
+    #[test]
+    fn flag_max_lines_replaces_rule_max_lines() {
+        let config = config_from("[[rule]]\nmax_lines = 300\n");
+        let overrides = Overrides {
+            max_lines: Some(100),
+            ..Overrides::default()
+        };
+        let options = merge(Some(config), &overrides, &dir()).expect("resolves");
+        assert_eq!(options.max_lines, Some(100));
     }
 
     #[test]
