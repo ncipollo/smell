@@ -1,271 +1,126 @@
-//! Vocabulary documentation for `--info`, assembled from the same rule
-//! tables that drive counting so the docs cannot drift from behavior.
+//! Topic registry for `--info`, so AI agents can walk documentation one
+//! topic at a time instead of reading a single giant page.
 
-use crate::code::branch::{BranchKind, BranchRule};
-use crate::code::{csharp, java, javascript, kotlin, python, rust, swift, typescript};
+mod branches;
+mod checks;
+mod config;
+mod filters;
+mod languages;
+mod usage;
 
-const LANGUAGES: &[(&str, &[BranchRule])] = &[
-    ("C#", csharp::BRANCH_RULES),
-    ("Java", java::BRANCH_RULES),
-    ("JavaScript", javascript::BRANCH_RULES),
-    ("Kotlin", kotlin::BRANCH_RULES),
-    ("Python", python::BRANCH_RULES),
-    ("Rust", rust::BRANCH_RULES),
-    ("Swift", swift::BRANCH_RULES),
-    ("TypeScript", typescript::BRANCH_RULES),
+pub struct Topic {
+    pub name: &'static str,
+    pub summary: &'static str,
+    render: fn() -> String,
+}
+
+pub const TOPICS: &[Topic] = &[
+    Topic {
+        name: "usage",
+        summary: "Invoking smell, stdin/diff piping, output modes, exit codes",
+        render: usage::render,
+    },
+    Topic {
+        name: "config",
+        summary: "smell.toml rules and flag precedence",
+        render: config::render,
+    },
+    Topic {
+        name: "languages",
+        summary: "Supported languages and per-language node kinds",
+        render: languages::render,
+    },
+    Topic {
+        name: "branches",
+        summary: "Friendly branch kinds and the raw node-kind escape hatch",
+        render: branches::render,
+    },
+    Topic {
+        name: "filters",
+        summary: "File globs and --implements type filtering",
+        render: filters::render,
+    },
+    Topic {
+        name: "checks",
+        summary: "--max-* limit checks and quiet mode",
+        render: checks::render,
+    },
 ];
 
-const CONFIG_EXAMPLE: &str = "\
-[[rule]]
-name = \"default\"
-include = [\"*.rs\"]
-exclude = [\"**/generated/**\"]
-branches = [\"switch\", \"boolean-operator\"]
-implements = [\"Labeled\"]
-max_complexity = 10
-max_methods = 8
-max_lines = 300
-max_declarations = 20
-";
-
-/// Renders the full vocabulary documentation: friendly branch kinds, the
-/// per-language node kinds behind them, raw escape-hatch semantics, and glob
-/// filtering rules. Written to assist AI agents composing smell commands.
-pub fn text() -> String {
-    let sections = [
-        branch_kinds_section(),
-        language_sections(),
-        raw_section(),
-        glob_section(),
-        implements_section(),
-        limit_section(),
-        quiet_section(),
-        config_section(),
-    ];
-    sections.join("\n")
-}
-
-fn branch_kinds_section() -> String {
-    let mut section = String::from(
-        "BRANCH KINDS\n\
-         Friendly, cross-language names accepted by --branches. Selecting any\n\
-         kinds replaces the default of counting everything.\n\n",
-    );
-    for kind in BranchKind::ALL {
-        section.push_str(&format!("  {:<18} {}\n", kind.name(), kind.description()));
+/// The short directory page listed by a bare `--info`: one line per topic,
+/// plus a pointer to drill into one.
+pub fn directory() -> String {
+    let mut page = String::from("TOPICS\n");
+    for topic in TOPICS {
+        page.push_str(&format!("  {:<12}{}\n", topic.name, topic.summary));
     }
-    section
+    page.push_str("\nrun: smell --info <topic>\n");
+    page
 }
 
-fn language_sections() -> String {
-    let mut section = String::from(
-        "LANGUAGE RULES\n\
-         The tree-sitter node kinds each friendly kind maps to, per language.\n\
-         A parenthesized note means the node only counts when that condition\n\
-         holds.\n",
-    );
-    for (language, rules) in LANGUAGES {
-        section.push_str(&format!("\n  {language}\n"));
-        for rule in *rules {
-            section.push_str(&format!(
-                "    {:<18} {}{}\n",
-                rule.kind.name(),
-                rule.node_kind,
-                match &rule.condition {
-                    Some(condition) => format!(" (when {})", condition.description),
-                    None => String::new(),
-                }
-            ));
-        }
-    }
-    section
+/// Renders the named topic's page, or `None` if it isn't registered.
+pub fn topic(name: &str) -> Option<String> {
+    TOPICS
+        .iter()
+        .find(|topic| topic.name == name)
+        .map(|topic| (topic.render)())
 }
 
-fn raw_section() -> String {
-    String::from(
-        "RAW NODE KINDS\n\
-         Any --branches value that is not a friendly kind is treated as a raw\n\
-         tree-sitter node kind and matched literally against node.kind(),\n\
-         independent of the classifier. Raw matches skip the conditions above:\n\
-         for example `--branches binary_expression` counts all binary\n\
-         expressions, not just && and ||. Friendly names carry the dynamic\n\
-         logic; prefer them unless you need a node kind with no friendly name.\n",
-    )
-}
-
-fn glob_section() -> String {
-    String::from(
-        "FILE GLOBS\n\
-         --include and --exclude take glob patterns (repeatable). A file is\n\
-         analyzed when it matches any include pattern (or none were given)\n\
-         and no exclude pattern. Patterns match against the path relative to\n\
-         the analysis root, so `**/generated/**` behaves the same regardless\n\
-         of the current directory. `*` also crosses directory separators, so\n\
-         `*.rs` matches nested files. A single explicit file argument\n\
-         bypasses the filters entirely.\n",
-    )
-}
-
-fn implements_section() -> String {
-    String::from(
-        "TYPE FILTERING\n\
-         --implements <NAME> (repeatable) analyzes only types that implement\n\
-         or extend the named supertype: one key covers interfaces,\n\
-         protocols, traits, and superclasses (Swift inheritance clauses and\n\
-         Kotlin delegation specifiers do not syntactically distinguish\n\
-         them). Multiple names OR together. Generic arguments are stripped\n\
-         from both sides, so `Comparable<String>` matches `Comparable`; a\n\
-         name matches a supertype's full text or its trailing simple name\n\
-         (`Display` matches `std::fmt::Display`). Top-level functions\n\
-         implement nothing, so any selection drops them, and files left\n\
-         with no matching types are omitted. Matching is per type: in Rust,\n\
-         if any impl block matches, all of the type's functions are\n\
-         included.\n",
-    )
-}
-
-fn limit_section() -> String {
-    String::from(
-        "LIMIT CHECKS\n\
-         --max-complexity <N>, --max-methods <N>, --max-lines <N>, and\n\
-         --max-declarations <N> (or max_complexity/max_methods/max_lines/\n\
-         max_declarations in smell.toml) each make the run a check for\n\
-         their measure: complexity per function, method count per type,\n\
-         line count per file, declaration count per file (types plus\n\
-         top-level functions). A check exits non-zero when any analyzed\n\
-         subject's value is strictly greater than N (equal to N passes),\n\
-         printing the offending files and subjects to stderr after the\n\
-         normal report, one section per failing measure. Every check\n\
-         covers whatever the other filters selected and runs\n\
-         independently: any combination may be configured. Without a\n\
-         limit, smell only reports and always exits zero on success.\n",
-    )
-}
-
-fn quiet_section() -> String {
-    String::from(
-        "QUIET MODE\n\
-         --quiet (or -q) suppresses the per-file complexity report on\n\
-         stdout. Errors and, when --max-complexity, --max-methods,\n\
-         --max-lines, or --max-declarations is set, the failure report on\n\
-         stderr are still printed, so a quiet CI run stays silent on success\n\
-         and prints only what a failure requires.\n",
-    )
-}
-
-fn config_section() -> String {
-    format!(
-        "CONFIG FILE\n\
-         An optional smell.toml in the directory smell is invoked from (not\n\
-         necessarily the analyzed path) declares named [[rule]] entries.\n\
-         --rule <NAME> selects one; without it, the rule named \"default\" is\n\
-         used if present, else the built-in defaults (a config file's mere\n\
-         presence does not change a bare `smell <path>` invocation). Explicit\n\
-         --include/--exclude/--branches/--implements/--max-complexity/\n\
-         --max-methods/--max-lines/--max-declarations flags replace a\n\
-         rule's value for that field entirely rather than merging with\n\
-         it.\n\n{CONFIG_EXAMPLE}"
-    )
+/// Every registered topic name, in directory order, for unknown-topic
+/// errors.
+pub fn names() -> Vec<&'static str> {
+    TOPICS.iter().map(|topic| topic.name).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::feature::complexity::config::Config;
 
     #[test]
-    fn text_documents_every_branch_kind() {
-        let text = text();
-        for kind in BranchKind::ALL {
+    fn directory_lists_every_topic() {
+        let page = directory();
+        for topic in TOPICS {
+            assert!(page.contains(topic.name), "missing topic: {}", topic.name);
             assert!(
-                text.contains(kind.name()),
-                "missing branch kind: {}",
-                kind.name()
+                page.contains(topic.summary),
+                "missing summary for: {}",
+                topic.name
             );
         }
     }
 
     #[test]
-    fn text_documents_every_language_rule() {
-        let text = text();
-        for (language, rules) in LANGUAGES {
-            assert!(text.contains(language), "missing language: {language}");
-            for rule in *rules {
-                assert!(
-                    text.contains(rule.node_kind),
-                    "missing node kind: {}",
-                    rule.node_kind
-                );
-                if let Some(condition) = &rule.condition {
-                    assert!(
-                        text.contains(condition.description),
-                        "missing condition: {}",
-                        condition.description
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn config_example_deserializes() {
-        let config: Config = toml::from_str(CONFIG_EXAMPLE).expect("example is valid config");
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].name, "default");
-    }
-
-    #[test]
-    fn config_example_cites_real_branch_kinds() {
-        let config: Config = toml::from_str(CONFIG_EXAMPLE).expect("example is valid config");
-        for branch in &config.rules[0].branches {
+    fn every_directory_topic_resolves() {
+        for registered in TOPICS {
             assert!(
-                BranchKind::from_name(branch).is_some(),
-                "not a branch kind: {branch}"
+                topic(registered.name).is_some(),
+                "topic() can't resolve registered name: {}",
+                registered.name
             );
         }
     }
 
     #[test]
-    fn text_includes_the_config_example() {
-        assert!(text().contains(CONFIG_EXAMPLE));
+    fn topic_pages_are_non_empty() {
+        for registered in TOPICS {
+            assert!(
+                !topic(registered.name).unwrap().is_empty(),
+                "empty page for topic: {}",
+                registered.name
+            );
+        }
     }
 
     #[test]
-    fn text_documents_implements() {
-        let text = text();
-        assert!(text.contains("--implements"));
-        assert!(text.contains("`Comparable<String>` matches `Comparable`"));
+    fn unknown_topic_returns_none() {
+        assert!(topic("bogus").is_none());
     }
 
     #[test]
-    fn text_documents_max_complexity() {
-        let text = text();
-        assert!(text.contains("--max-complexity"));
-        assert!(text.contains("exits non-zero"));
-    }
-
-    #[test]
-    fn text_documents_max_methods() {
-        let text = text();
-        assert!(text.contains("--max-methods"));
-    }
-
-    #[test]
-    fn text_documents_max_lines() {
-        let text = text();
-        assert!(text.contains("--max-lines"));
-    }
-
-    #[test]
-    fn text_documents_max_declarations() {
-        let text = text();
-        assert!(text.contains("--max-declarations"));
-    }
-
-    #[test]
-    fn text_documents_quiet() {
-        let text = text();
-        assert!(text.contains("--quiet"));
-        assert!(text.contains("silent on success"));
+    fn directory_stays_short() {
+        assert!(
+            directory().lines().count() <= 15,
+            "directory grew past a quick scan"
+        );
     }
 }

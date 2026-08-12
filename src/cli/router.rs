@@ -24,33 +24,33 @@ struct Cli {
     #[arg(long)]
     exclude: Vec<String>,
 
-    /// Count only these branch kinds: friendly names (see --info) or raw
-    /// tree-sitter node kinds, comma-separated.
+    /// Count only these branch kinds: friendly names (see --info branches)
+    /// or raw tree-sitter node kinds, comma-separated.
     #[arg(long, value_delimiter = ',')]
     branches: Vec<String>,
 
     /// Only analyze types implementing/extending this interface, protocol,
-    /// trait, or superclass (repeatable; see --info).
+    /// trait, or superclass (repeatable; see --info filters).
     #[arg(long, value_name = "NAME")]
     implements: Vec<String>,
 
     /// Fail (exit non-zero) if any function's complexity exceeds this limit,
-    /// listing the offending files and functions (see --info).
+    /// listing the offending files and functions (see --info checks).
     #[arg(long, value_name = "N")]
     max_complexity: Option<usize>,
 
     /// Fail (exit non-zero) if any type's method count exceeds this limit,
-    /// listing the offending files and types (see --info).
+    /// listing the offending files and types (see --info checks).
     #[arg(long, value_name = "N")]
     max_methods: Option<usize>,
 
     /// Fail (exit non-zero) if any file's line count exceeds this limit,
-    /// listing the offending files (see --info).
+    /// listing the offending files (see --info checks).
     #[arg(long, value_name = "N")]
     max_lines: Option<usize>,
 
     /// Fail (exit non-zero) if any file's declaration count exceeds this
-    /// limit, listing the offending files (see --info).
+    /// limit, listing the offending files (see --info checks).
     #[arg(long, value_name = "N")]
     max_declarations: Option<usize>,
 
@@ -68,9 +68,10 @@ struct Cli {
     #[arg(long, conflicts_with = "quiet")]
     json: bool,
 
-    /// Print the branch-kind and glob vocabulary docs and exit.
-    #[arg(long)]
-    info: bool,
+    /// Print documentation and exit. Bare --info lists the available
+    /// topics; --info <TOPIC> prints one.
+    #[arg(long, value_name = "TOPIC", num_args = 0..=1)]
+    info: Option<Option<String>>,
 }
 
 pub fn run() -> ExitCode {
@@ -89,8 +90,8 @@ pub fn run() -> ExitCode {
         json,
         info,
     } = Cli::parse();
-    if info {
-        return info::run();
+    if let Some(topic) = info {
+        return info::run(topic.as_deref());
     }
     complexity::run(
         paths,
@@ -238,10 +239,23 @@ mod tests {
     }
 
     #[test]
-    fn info_does_not_require_a_path() {
+    fn bare_info_does_not_require_a_path() {
         let cli = Cli::try_parse_from(["smell", "--info"]).expect("--info should parse");
-        assert!(cli.info);
+        assert_eq!(cli.info, Some(None));
         assert!(cli.paths.is_empty());
+    }
+
+    #[test]
+    fn info_with_topic_parses_the_topic() {
+        let cli =
+            Cli::try_parse_from(["smell", "--info", "usage"]).expect("--info usage should parse");
+        assert_eq!(cli.info, Some(Some("usage".to_string())));
+    }
+
+    #[test]
+    fn info_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.info, None);
     }
 
     #[test]
