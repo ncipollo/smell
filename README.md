@@ -43,7 +43,7 @@ smell src --max-lines 300                               # exit non-zero if any f
 smell src --max-declarations 10                         # exit non-zero if any file has more than 10 declarations
 ```
 
-`--include`/`--exclude` and `--implements` are repeatable; run `smell --info` for the full vocabulary reference (branch kinds, glob semantics, etc).
+`--include`/`--exclude` and `--implements` are repeatable. Run `smell --info` for a directory of documentation topics (usage, config, languages, branches, filters, checks), or `smell --info branches` to drill straight into one.
 
 ## Configuration
 
