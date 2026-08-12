@@ -46,6 +46,7 @@ mod tests {
     ) -> FileReport {
         FileReport {
             path: PathBuf::from(path),
+            lines: 1,
             complexity: FileComplexity { functions, types },
         }
     }
@@ -75,9 +76,10 @@ mod tests {
         let result = failures(&reports, 3);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].path, PathBuf::from("a.rs"));
-        assert_eq!(result[0].offenders.len(), 1);
-        assert_eq!(result[0].offenders[0].name, "top");
-        assert_eq!(result[0].offenders[0].value, 4);
+        let offenders = result[0].subject.entries();
+        assert_eq!(offenders.len(), 1);
+        assert_eq!(offenders[0].name, "top");
+        assert_eq!(offenders[0].value, 4);
     }
 
     #[test]
@@ -88,7 +90,7 @@ mod tests {
             vec![shape(vec![function("area", 9)])],
         )];
         let result = failures(&reports, 3);
-        assert_eq!(result[0].offenders[0].name, "Shape.area");
+        assert_eq!(result[0].subject.entries()[0].name, "Shape.area");
     }
 
     #[test]
@@ -111,7 +113,8 @@ mod tests {
         )];
         let result = failures(&reports, 3);
         let names: Vec<&str> = result[0]
-            .offenders
+            .subject
+            .entries()
             .iter()
             .map(|offender| offender.name.as_str())
             .collect();

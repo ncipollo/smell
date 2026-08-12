@@ -5,7 +5,7 @@
 use serde::Serialize;
 
 use crate::code::{ComplexityRollup, FunctionComplexity, TypeComplexity};
-use crate::feature::complexity::check::{CheckFailure, CheckResult, Measure, Offender};
+use crate::feature::complexity::check::{CheckFailure, CheckResult, Measure, Offender, Subject};
 use crate::{FileReport, PathError};
 
 /// Renders the analysis (and, when any measure is configured, its check
@@ -46,6 +46,7 @@ impl Error {
 #[derive(Serialize)]
 struct File {
     path: String,
+    lines: usize,
     types: Vec<Type>,
     functions: Vec<Function>,
     rollup: Rollup,
@@ -55,6 +56,7 @@ impl File {
     fn new(report: &FileReport) -> Self {
         File {
             path: report.path.display().to_string(),
+            lines: report.lines,
             types: report.complexity.types.iter().map(Type::new).collect(),
             functions: report
                 .complexity
@@ -137,6 +139,8 @@ struct Check {
     complexity: Option<ComplexityCheck>,
     #[serde(skip_serializing_if = "Option::is_none")]
     methods: Option<MethodsCheck>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lines: Option<LinesCheck>,
 }
 
 impl Check {
@@ -152,9 +156,14 @@ impl Check {
             .iter()
             .find(|result| result.measure == Measure::Methods)
             .map(MethodsCheck::new);
+        let lines = results
+            .iter()
+            .find(|result| result.measure == Measure::Lines)
+            .map(LinesCheck::new);
         Some(Check {
             complexity,
             methods,
+            lines,
         })
     }
 }
@@ -185,7 +194,8 @@ impl ComplexityFailure {
         ComplexityFailure {
             path: failure.path.display().to_string(),
             functions: failure
-                .offenders
+                .subject
+                .entries()
                 .iter()
                 .map(Function::from_offender)
                 .collect(),
@@ -218,7 +228,12 @@ impl MethodsFailure {
     fn new(failure: &CheckFailure) -> Self {
         MethodsFailure {
             path: failure.path.display().to_string(),
-            types: failure.offenders.iter().map(TypeOffender::new).collect(),
+            types: failure
+                .subject
+                .entries()
+                .iter()
+                .map(TypeOffender::new)
+                .collect(),
         }
     }
 }
@@ -234,6 +249,39 @@ impl TypeOffender {
         TypeOffender {
             name: offender.name.clone(),
             methods: offender.value,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct LinesCheck {
+    limit: usize,
+    failures: Vec<LinesFailure>,
+}
+
+impl LinesCheck {
+    fn new(result: &CheckResult) -> Self {
+        LinesCheck {
+            limit: result.limit,
+            failures: result.failures.iter().map(LinesFailure::new).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct LinesFailure {
+    path: String,
+    lines: usize,
+}
+
+impl LinesFailure {
+    fn new(failure: &CheckFailure) -> Self {
+        let Subject::File(lines) = &failure.subject else {
+            unreachable!("a Measure::Lines result only ever produces a File subject")
+        };
+        LinesFailure {
+            path: failure.path.display().to_string(),
+            lines: *lines,
         }
     }
 }
@@ -258,6 +306,7 @@ mod tests {
     fn report_with_functions_and_types() -> FileReport {
         FileReport {
             path: PathBuf::from("src/foo.rs"),
+            lines: 42,
             complexity: FileComplexity {
                 functions: vec![function("top_level", 1)],
                 types: vec![TypeComplexity {
@@ -280,12 +329,20 @@ mod tests {
         }
     }
 
+    fn entries_failure(path: &str, offenders: Vec<Offender>) -> CheckFailure {
+        CheckFailure {
+            path: PathBuf::from(path),
+            subject: Subject::Entries(offenders),
+        }
+    }
+
     #[test]
     fn renders_a_file_with_top_level_functions_and_types() {
         let reports = [report_with_functions_and_types()];
         let document = parse(&reports, &[]);
         let file = &document["files"][0];
         assert_eq!(file["path"], "src/foo.rs");
+        assert_eq!(file["lines"], 42);
         assert_eq!(
             file["functions"],
             json!([{ "name": "top_level", "complexity": 1 }])
@@ -335,10 +392,10 @@ mod tests {
         let results = [CheckResult {
             measure: Measure::Complexity,
             limit: 2,
-            failures: vec![CheckFailure {
-                path: PathBuf::from("src/foo.rs"),
-                offenders: vec![offender("Shape.area", 3)],
-            }],
+            failures: vec![entries_failure(
+                "src/foo.rs",
+                vec![offender("Shape.area", 3)],
+            )],
         }];
         let document = parse(&reports, &results);
         assert_eq!(
@@ -360,10 +417,7 @@ mod tests {
         let results = [CheckResult {
             measure: Measure::Methods,
             limit: 5,
-            failures: vec![CheckFailure {
-                path: PathBuf::from("src/foo.rs"),
-                offenders: vec![offender("Shape", 8)],
-            }],
+            failures: vec![entries_failure("src/foo.rs", vec![offender("Shape", 8)])],
         }];
         let document = parse(&reports, &results);
         assert_eq!(
@@ -381,7 +435,30 @@ mod tests {
     }
 
     #[test]
-    fn both_measures_are_present_when_both_are_configured() {
+    fn lines_check_uses_path_and_lines_fields() {
+        let reports = [report_with_functions_and_types()];
+        let results = [CheckResult {
+            measure: Measure::Lines,
+            limit: 100,
+            failures: vec![CheckFailure {
+                path: PathBuf::from("src/foo.rs"),
+                subject: Subject::File(150),
+            }],
+        }];
+        let document = parse(&reports, &results);
+        assert_eq!(
+            document["check"],
+            json!({
+                "lines": {
+                    "limit": 100,
+                    "failures": [{ "path": "src/foo.rs", "lines": 150 }]
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn all_measures_are_present_when_all_are_configured() {
         let reports = [report_with_functions_and_types()];
         let results = [
             CheckResult {
@@ -394,10 +471,16 @@ mod tests {
                 limit: 5,
                 failures: vec![],
             },
+            CheckResult {
+                measure: Measure::Lines,
+                limit: 100,
+                failures: vec![],
+            },
         ];
         let document = parse(&reports, &results);
         assert!(document["check"]["complexity"].is_object());
         assert!(document["check"]["methods"].is_object());
+        assert!(document["check"]["lines"].is_object());
     }
 
     #[test]

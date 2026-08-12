@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::feature::complexity::FileReport;
 use crate::feature::complexity::options::AnalysisOptions;
 
+mod file_lines;
 mod function_complexity;
 mod method_count;
 mod scope;
@@ -17,6 +18,7 @@ mod scope;
 pub enum Measure {
     Complexity,
     Methods,
+    Lines,
 }
 
 /// A named subject inside a file that exceeded the limit: a function for
@@ -26,10 +28,28 @@ pub struct Offender {
     pub value: usize,
 }
 
-/// A file containing at least one offender.
+/// What exceeded the limit in a failing file: named entries inside it
+/// (functions, types), or the file itself (line count).
+pub enum Subject {
+    Entries(Vec<Offender>),
+    File(usize),
+}
+
+impl Subject {
+    /// The named offenders for an `Entries` subject; empty for a `File`
+    /// subject, which has no named entries to list.
+    pub fn entries(&self) -> &[Offender] {
+        match self {
+            Subject::Entries(offenders) => offenders,
+            Subject::File(_) => &[],
+        }
+    }
+}
+
+/// A file that failed a measure.
 pub struct CheckFailure {
     pub path: PathBuf,
-    pub offenders: Vec<Offender>,
+    pub subject: Subject,
 }
 
 /// The outcome of one *enabled* measure. Present with an empty `failures`
@@ -52,6 +72,7 @@ pub fn check(reports: &[FileReport], options: &AnalysisOptions) -> Vec<CheckResu
     let configured = [
         (Measure::Complexity, options.max_complexity),
         (Measure::Methods, options.max_methods),
+        (Measure::Lines, options.max_lines),
     ];
     configured
         .into_iter()
@@ -63,6 +84,7 @@ fn result(reports: &[FileReport], measure: Measure, limit: usize) -> CheckResult
     let failures = match measure {
         Measure::Complexity => function_complexity::failures(reports, limit),
         Measure::Methods => method_count::failures(reports, limit),
+        Measure::Lines => file_lines::failures(reports, limit),
     };
     CheckResult {
         measure,
@@ -79,6 +101,7 @@ mod tests {
     fn report_with_complexity(path: &str, complexity: usize) -> FileReport {
         FileReport {
             path: PathBuf::from(path),
+            lines: 1,
             complexity: FileComplexity {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),
@@ -109,17 +132,19 @@ mod tests {
     }
 
     #[test]
-    fn both_configured_limits_run_in_declaration_order() {
+    fn all_configured_limits_run_in_declaration_order() {
         let reports = [report_with_complexity("a.rs", 1)];
         let options = AnalysisOptions {
             max_complexity: Some(5),
             max_methods: Some(2),
+            max_lines: Some(100),
             ..AnalysisOptions::default()
         };
         let results = check(&reports, &options);
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 3);
         assert_eq!(results[0].measure, Measure::Complexity);
         assert_eq!(results[1].measure, Measure::Methods);
+        assert_eq!(results[2].measure, Measure::Lines);
     }
 
     #[test]

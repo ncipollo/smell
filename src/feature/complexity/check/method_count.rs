@@ -51,6 +51,7 @@ mod tests {
     fn report(path: &str, types: Vec<TypeComplexity>) -> FileReport {
         FileReport {
             path: PathBuf::from(path),
+            lines: 1,
             complexity: FileComplexity {
                 functions: Vec::new(),
                 types,
@@ -75,8 +76,9 @@ mod tests {
         let result = failures(&reports, 3);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].path, PathBuf::from("a.rs"));
-        assert_eq!(result[0].offenders[0].name, "Shape");
-        assert_eq!(result[0].offenders[0].value, 4);
+        let offenders = result[0].subject.entries();
+        assert_eq!(offenders[0].name, "Shape");
+        assert_eq!(offenders[0].value, 4);
     }
 
     #[test]
@@ -93,7 +95,8 @@ mod tests {
         )];
         let result = failures(&reports, 3);
         let names: Vec<&str> = result[0]
-            .offenders
+            .subject
+            .entries()
             .iter()
             .map(|offender| offender.name.as_str())
             .collect();
