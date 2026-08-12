@@ -16,6 +16,7 @@ pub struct Overrides {
     pub branches: Vec<String>,
     pub implements: Vec<String>,
     pub max_complexity: Option<usize>,
+    pub max_methods: Option<usize>,
     pub rule: Option<String>,
 }
 
@@ -41,6 +42,7 @@ fn merge(config: Option<Config>, overrides: &Overrides, dir: &Path) -> io::Resul
         types: TypeFilter::new(selected(&overrides.implements, &rule.implements)),
         branches: BranchFilter::from_specs(&specs),
         max_complexity: overrides.max_complexity.or(rule.max_complexity),
+        max_methods: overrides.max_methods.or(rule.max_methods),
     })
 }
 
@@ -290,6 +292,30 @@ mod tests {
         };
         let options = merge(Some(config), &overrides, &dir()).expect("resolves");
         assert_eq!(options.max_complexity, Some(5));
+    }
+
+    #[test]
+    fn no_config_no_flags_sets_no_methods_limit() {
+        let options = merge(None, &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_methods, None);
+    }
+
+    #[test]
+    fn rule_max_methods_applies() {
+        let config = config_from("[[rule]]\nmax_methods = 8\n");
+        let options = merge(Some(config), &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_methods, Some(8));
+    }
+
+    #[test]
+    fn flag_max_methods_replaces_rule_max_methods() {
+        let config = config_from("[[rule]]\nmax_methods = 8\n");
+        let overrides = Overrides {
+            max_methods: Some(3),
+            ..Overrides::default()
+        };
+        let options = merge(Some(config), &overrides, &dir()).expect("resolves");
+        assert_eq!(options.max_methods, Some(3));
     }
 
     #[test]

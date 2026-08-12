@@ -12,4 +12,6 @@ pub struct AnalysisOptions {
     pub branches: BranchFilter,
     /// When set, any function whose complexity exceeds this fails the run.
     pub max_complexity: Option<usize>,
+    /// When set, any type with more methods than this fails the run.
+    pub max_methods: Option<usize>,
 }

@@ -39,6 +39,11 @@ struct Cli {
     #[arg(long, value_name = "N")]
     max_complexity: Option<usize>,
 
+    /// Fail (exit non-zero) if any type's method count exceeds this limit,
+    /// listing the offending files and types (see --info).
+    #[arg(long, value_name = "N")]
+    max_methods: Option<usize>,
+
     /// Use the named rule from smell.toml instead of the "default" rule.
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
@@ -66,6 +71,7 @@ pub fn run() -> ExitCode {
         branches,
         implements,
         max_complexity,
+        max_methods,
         rule,
         quiet,
         json,
@@ -82,6 +88,7 @@ pub fn run() -> ExitCode {
             branches,
             implements,
             max_complexity,
+            max_methods,
             rule,
         },
         quiet,
@@ -175,6 +182,19 @@ mod tests {
     fn max_complexity_defaults_to_none() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert_eq!(cli.max_complexity, None);
+    }
+
+    #[test]
+    fn parses_max_methods() {
+        let cli = Cli::try_parse_from(["smell", "src", "--max-methods", "5"])
+            .expect("max methods should parse");
+        assert_eq!(cli.max_methods, Some(5));
+    }
+
+    #[test]
+    fn max_methods_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.max_methods, None);
     }
 
     #[test]
