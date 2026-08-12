@@ -9,7 +9,7 @@ pub mod feature;
 #[cfg(test)]
 mod testing;
 
-pub use feature::complexity::check::{CheckFailure, check};
+pub use feature::complexity::check::{CheckFailure, CheckResult, Measure, Offender, check};
 pub use feature::complexity::options::AnalysisOptions;
 pub use feature::complexity::resolve::Overrides;
 pub use feature::complexity::{Analysis, FileReport, PathError};

@@ -23,6 +23,7 @@ exclude = [\"**/generated/**\"]
 branches = [\"switch\", \"boolean-operator\"]
 implements = [\"Labeled\"]
 max_complexity = 10
+max_methods = 8
 ";
 
 /// Renders the full vocabulary documentation: friendly branch kinds, the
@@ -123,13 +124,17 @@ fn implements_section() -> String {
 
 fn limit_section() -> String {
     String::from(
-        "COMPLEXITY LIMIT\n\
-         --max-complexity <N> (or max_complexity in smell.toml) makes the run\n\
-         a check: it exits non-zero when any analyzed function's complexity\n\
+        "LIMIT CHECKS\n\
+         --max-complexity <N> (or max_complexity in smell.toml) and\n\
+         --max-methods <N> (or max_methods in smell.toml) each make the run\n\
+         a check for their measure: complexity per function, method count\n\
+         per type. A check exits non-zero when any analyzed subject's value\n\
          is strictly greater than N (equal to N passes), printing the\n\
-         offending files and functions to stderr after the normal report.\n\
-         The check covers whatever the other filters selected. Without a\n\
-         limit, smell only reports and always exits zero on success.\n",
+         offending files and subjects to stderr after the normal report,\n\
+         one section per failing measure. Both checks cover whatever the\n\
+         other filters selected and run independently: either, both, or\n\
+         neither may be configured. Without a limit, smell only reports and\n\
+         always exits zero on success.\n",
     )
 }
 
@@ -137,9 +142,9 @@ fn quiet_section() -> String {
     String::from(
         "QUIET MODE\n\
          --quiet (or -q) suppresses the per-file complexity report on\n\
-         stdout. Errors and, when --max-complexity is set, the failure\n\
-         report on stderr are still printed, so a quiet CI run stays\n\
-         silent on success and prints only what a failure requires.\n",
+         stdout. Errors and, when --max-complexity or --max-methods is set,\n\
+         the failure report on stderr are still printed, so a quiet CI run\n\
+         stays silent on success and prints only what a failure requires.\n",
     )
 }
 
@@ -151,9 +156,9 @@ fn config_section() -> String {
          --rule <NAME> selects one; without it, the rule named \"default\" is\n\
          used if present, else the built-in defaults (a config file's mere\n\
          presence does not change a bare `smell <path>` invocation). Explicit\n\
-         --include/--exclude/--branches/--implements/--max-complexity flags\n\
-         replace a rule's value for that field entirely rather than merging\n\
-         with it.\n\n{CONFIG_EXAMPLE}"
+         --include/--exclude/--branches/--implements/--max-complexity/\n\
+         --max-methods flags replace a rule's value for that field entirely\n\
+         rather than merging with it.\n\n{CONFIG_EXAMPLE}"
     )
 }
 
@@ -231,6 +236,12 @@ mod tests {
         let text = text();
         assert!(text.contains("--max-complexity"));
         assert!(text.contains("exits non-zero"));
+    }
+
+    #[test]
+    fn text_documents_max_methods() {
+        let text = text();
+        assert!(text.contains("--max-methods"));
     }
 
     #[test]

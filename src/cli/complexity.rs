@@ -9,7 +9,7 @@ mod json;
 
 use crate::code::{ComplexityRollup, FunctionComplexity};
 use crate::{
-    AnalysisOptions, CheckFailure, FileReport, Overrides, PathError, analyze, check,
+    AnalysisOptions, CheckResult, FileReport, Measure, Overrides, PathError, analyze, check,
     resolve_options,
 };
 
@@ -34,13 +34,7 @@ pub fn run(paths: Vec<PathBuf>, overrides: Overrides, quiet: bool, json: bool) -
             eprintln!("error: {}: {}", error.path.display(), error.error);
         }
     }
-    let exit = emit(
-        &analysis.reports,
-        &analysis.errors,
-        options.max_complexity,
-        quiet,
-        json,
-    );
+    let exit = emit(&analysis.reports, &analysis.errors, &options, quiet, json);
     if analysis.errors.is_empty() {
         exit
     } else {
@@ -48,58 +42,83 @@ pub fn run(paths: Vec<PathBuf>, overrides: Overrides, quiet: bool, json: bool) -
     }
 }
 
-/// Renders the analysis in the requested format, running the
-/// --max-complexity check once and sharing its result across both: embedded
-/// in the document for `--json`, or a colored stderr report for the table.
-/// Path errors are embedded in the JSON document; for the table they've
-/// already been printed to stderr by the caller.
+/// Renders the analysis in the requested format, running every configured
+/// measure once and sharing its result across both: embedded in the
+/// document for `--json`, or a colored stderr section per failing measure
+/// for the table. Path errors are embedded in the JSON document; for the
+/// table they've already been printed to stderr by the caller.
 fn emit(
     reports: &[FileReport],
     errors: &[PathError],
-    limit: Option<usize>,
+    options: &AnalysisOptions,
     quiet: bool,
     json: bool,
 ) -> ExitCode {
-    let failures = limit.map(|limit| check(reports, limit)).unwrap_or_default();
+    let results = check(reports, options);
     if json {
-        println!("{}", self::json::render(reports, limit, &failures, errors));
+        println!("{}", self::json::render(reports, &results, errors));
     } else {
         print!("{}", format_reports(reports, quiet));
-        if let Some(limit) = limit
-            && !failures.is_empty()
-        {
-            let color = io::stderr().is_terminal();
-            eprint!("{}", format_failures(&failures, limit, color));
+        let report = format_results(&results, io::stderr().is_terminal());
+        if !report.is_empty() {
+            eprint!("{report}");
         }
     }
-    if failures.is_empty() {
-        ExitCode::SUCCESS
-    } else {
+    exit_code(&results)
+}
+
+fn exit_code(results: &[CheckResult]) -> ExitCode {
+    if results.iter().any(CheckResult::failed) {
         ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }
 
 const RED_BOLD: &str = "\x1b[1;31m";
 const RESET: &str = "\x1b[0m";
 
-fn format_failures(failures: &[CheckFailure], limit: usize, color: bool) -> String {
+/// One section per failing measure, blank-line separated. A run with a
+/// single failing measure renders byte-for-byte what a lone check did before
+/// multiple measures existed.
+fn format_results(results: &[CheckResult], color: bool) -> String {
+    results
+        .iter()
+        .filter(|result| result.failed())
+        .map(|result| format_result(result, color))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_result(result: &CheckResult, color: bool) -> String {
     let header = format!(
-        "✗ complexity check failed: {} file(s) exceed limit {limit}",
-        failures.len()
+        "✗ {} check failed: {} file(s) exceed limit {}",
+        label(result.measure),
+        result.failures.len(),
+        result.limit
     );
     let mut text = paint(&header, color);
     text.push('\n');
-    for failure in failures {
+    for failure in &result.failures {
         text.push_str(&format!("{}\n", failure.path.display()));
-        for function in &failure.functions {
+        for offender in &failure.offenders {
             text.push_str(&format!(
                 "  {}  {}\n",
-                function.name,
-                paint(&function.complexity.to_string(), color)
+                offender.name,
+                paint(&offender.value.to_string(), color)
             ));
         }
     }
     text
+}
+
+/// User-facing wording for a measure's stderr header. Kept in `cli` since
+/// `feature::complexity::check::Measure` is a bare discriminant.
+fn label(measure: Measure) -> &'static str {
+    match measure {
+        Measure::Complexity => "complexity",
+        Measure::Methods => "method count",
+    }
 }
 
 /// Wraps text in bold red when stderr is a terminal; plain otherwise so
@@ -136,6 +155,7 @@ fn format_file(report: &FileReport) -> String {
             &complexity_type.name,
             &complexity_type.functions,
             &complexity_type.rollup(),
+            Some(complexity_type.functions.len()),
         );
     }
     if !report.complexity.functions.is_empty() {
@@ -144,9 +164,10 @@ fn format_file(report: &FileReport) -> String {
             "(top-level)",
             &report.complexity.functions,
             &ComplexityRollup::of(&report.complexity.functions),
+            None,
         );
     }
-    add_rollup_row(&mut table, "file", &report.complexity.rollup());
+    add_rollup_row(&mut table, "file", &report.complexity.rollup(), None);
     text.push_str(&format!("{table}\n\n"));
     text
 }
@@ -156,8 +177,9 @@ fn add_group_rows(
     name: &str,
     functions: &[FunctionComplexity],
     rollup: &ComplexityRollup,
+    methods: Option<usize>,
 ) {
-    add_rollup_row(table, name, rollup);
+    add_rollup_row(table, name, rollup, methods);
     for function in functions {
         table.add_row([
             format!("  {}", function.name),
@@ -166,56 +188,85 @@ fn add_group_rows(
     }
 }
 
-fn add_rollup_row(table: &mut Table, name: &str, rollup: &ComplexityRollup) {
+fn add_rollup_row(
+    table: &mut Table,
+    name: &str,
+    rollup: &ComplexityRollup,
+    methods: Option<usize>,
+) {
     table.add_row([
         Cell::new(name).add_attribute(Attribute::Bold),
-        Cell::new(format_rollup(rollup)).add_attribute(Attribute::Bold),
+        Cell::new(format_rollup(rollup, methods)).add_attribute(Attribute::Bold),
     ]);
 }
 
-fn format_rollup(rollup: &ComplexityRollup) -> String {
-    format!(
+fn format_rollup(rollup: &ComplexityRollup, methods: Option<usize>) -> String {
+    let base = format!(
         "total {} · max {} · avg {:.1}",
         rollup.total, rollup.max, rollup.average
-    )
+    );
+    match methods {
+        Some(count) => format!("{base} · methods {count}"),
+        None => base,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::feature::complexity::check::FailedFunction;
+    use crate::code::{FileComplexity, TypeComplexity};
+    use crate::feature::complexity::check::{CheckFailure, Offender};
 
-    fn failures() -> Vec<CheckFailure> {
+    fn offender(name: &str, value: usize) -> Offender {
+        Offender {
+            name: name.to_string(),
+            value,
+        }
+    }
+
+    fn complexity_failures() -> Vec<CheckFailure> {
         vec![
             CheckFailure {
                 path: PathBuf::from("src/a.rs"),
-                functions: vec![FailedFunction {
-                    name: "Shape.area".to_string(),
-                    complexity: 12,
-                }],
+                offenders: vec![offender("Shape.area", 12)],
             },
             CheckFailure {
                 path: PathBuf::from("src/b.rs"),
-                functions: vec![FailedFunction {
-                    name: "top".to_string(),
-                    complexity: 11,
-                }],
+                offenders: vec![offender("top", 11)],
             },
         ]
     }
 
+    fn complexity_result(failures: Vec<CheckFailure>) -> CheckResult {
+        CheckResult {
+            measure: Measure::Complexity,
+            limit: 10,
+            failures,
+        }
+    }
+
+    fn methods_result(failures: Vec<CheckFailure>) -> CheckResult {
+        CheckResult {
+            measure: Measure::Methods,
+            limit: 5,
+            failures,
+        }
+    }
+
     #[test]
-    fn format_failures_leads_with_a_summary_then_lists_files_and_functions() {
+    fn format_result_leads_with_a_summary_then_lists_files_and_offenders() {
+        let result = complexity_result(complexity_failures());
         assert_eq!(
-            format_failures(&failures(), 10, false),
+            format_result(&result, false),
             "✗ complexity check failed: 2 file(s) exceed limit 10\n\
              src/a.rs\n  Shape.area  12\nsrc/b.rs\n  top  11\n"
         );
     }
 
     #[test]
-    fn format_failures_paints_the_header_and_complexities_red_when_colored() {
-        let text = format_failures(&failures(), 10, true);
+    fn format_result_paints_the_header_and_values_red_when_colored() {
+        let result = complexity_result(complexity_failures());
+        let text = format_result(&result, true);
         assert!(text.starts_with(&format!(
             "{RED_BOLD}✗ complexity check failed: 2 file(s) exceed limit 10{RESET}\n"
         )));
@@ -223,14 +274,51 @@ mod tests {
     }
 
     #[test]
-    fn format_failures_without_color_has_no_escape_codes() {
-        assert!(!format_failures(&failures(), 10, false).contains('\x1b'));
+    fn format_result_without_color_has_no_escape_codes() {
+        let result = complexity_result(complexity_failures());
+        assert!(!format_result(&result, false).contains('\x1b'));
+    }
+
+    #[test]
+    fn format_results_uses_the_method_count_label() {
+        let result = methods_result(vec![CheckFailure {
+            path: PathBuf::from("src/a.rs"),
+            offenders: vec![offender("Shape", 8)],
+        }]);
+        let text = format_results(&[result], false);
+        assert!(text.starts_with("✗ method count check failed: 1 file(s) exceed limit 5\n"));
+    }
+
+    #[test]
+    fn format_results_joins_multiple_failing_measures_with_a_blank_line() {
+        let results = [
+            complexity_result(complexity_failures()),
+            methods_result(vec![CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                offenders: vec![offender("Shape", 8)],
+            }]),
+        ];
+        let text = format_results(&results, false);
+        assert!(text.contains("✗ complexity check failed"));
+        assert!(text.contains("✗ method count check failed"));
+        assert!(text.contains("check failed: 1 file(s) exceed limit 5\nsrc/a.rs\n"));
+    }
+
+    #[test]
+    fn format_results_omits_passing_measures() {
+        let results = [complexity_result(vec![])];
+        assert_eq!(format_results(&results, false), "");
+    }
+
+    #[test]
+    fn format_results_is_empty_when_no_measures_are_configured() {
+        assert_eq!(format_results(&[], false), "");
     }
 
     fn sample_reports() -> Vec<FileReport> {
         vec![FileReport {
             path: PathBuf::from("src/a.rs"),
-            complexity: crate::code::FileComplexity {
+            complexity: FileComplexity {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),
                     complexity: 3,
@@ -250,5 +338,39 @@ mod tests {
         let text = format_reports(&sample_reports(), false);
         assert!(text.contains("src/a.rs"));
         assert!(text.contains("top"));
+    }
+
+    #[test]
+    fn format_reports_shows_method_count_on_type_rows_only() {
+        let reports = vec![FileReport {
+            path: PathBuf::from("src/a.rs"),
+            complexity: FileComplexity {
+                functions: vec![FunctionComplexity {
+                    name: "top".to_string(),
+                    complexity: 1,
+                }],
+                types: vec![TypeComplexity {
+                    name: "Shape".to_string(),
+                    supertypes: Vec::new(),
+                    functions: vec![
+                        FunctionComplexity {
+                            name: "area".to_string(),
+                            complexity: 1,
+                        },
+                        FunctionComplexity {
+                            name: "label".to_string(),
+                            complexity: 1,
+                        },
+                    ],
+                }],
+            },
+        }];
+        let text = format_reports(&reports, false);
+        assert!(text.contains("methods 2"));
+        let top_level_line = text
+            .lines()
+            .find(|line| line.contains("(top-level)"))
+            .expect("top-level row");
+        assert!(!top_level_line.contains("methods"));
     }
 }

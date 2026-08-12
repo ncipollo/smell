@@ -2,7 +2,7 @@
 
 CLI tool for static code analysis across various programming languages.
 
-Reports cyclomatic complexity per function, grouped by type and file. Each function starts at 1; every branch adds 1 (conditionals, loops, switch arms, catch clauses, short-circuit operators, etc).
+Reports cyclomatic complexity per function and method count per type, grouped by file. Each function starts at 1; every branch adds 1 (conditionals, loops, switch arms, catch clauses, short-circuit operators, etc).
 
 ## Install
 
@@ -38,6 +38,7 @@ Filter which files and types are analyzed, and optionally fail the run past a co
 smell src --include "*.rs" --exclude "**/generated/**"  # only *.rs, skipping generated code
 smell src --implements Shape                            # only types implementing/extending Shape
 smell src --max-complexity 10                           # exit non-zero if any function exceeds 10
+smell src --max-methods 15                               # exit non-zero if any type has more than 15 methods
 ```
 
 `--include`/`--exclude` and `--implements` are repeatable; run `smell --info` for the full vocabulary reference (branch kinds, glob semantics, etc).
@@ -53,6 +54,7 @@ include = ["*.rs"]
 exclude = ["**/generated/**"]
 implements = ["Shape"]
 max_complexity = 10
+max_methods = 15
 
 [[rule]]
 name = "swift"
