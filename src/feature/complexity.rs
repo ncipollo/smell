@@ -14,6 +14,7 @@ pub mod filter;
 pub mod options;
 pub mod resolve;
 pub mod router;
+pub mod tree;
 
 #[derive(Debug, Clone)]
 pub struct FileReport {
@@ -141,11 +142,15 @@ fn source_files(path: &Path, filter: &FileFilter) -> io::Result<Vec<PathBuf>> {
 /// search; otherwise it's silently skipped rather than erroring, since
 /// callers may pass mixed lists (e.g. a `git diff` file list).
 fn explicit_file(path: &Path, filter: &FileFilter) -> Vec<PathBuf> {
-    if router::is_supported(path) && filter.matches(path) {
+    if explicit_file_included(path, filter) {
         vec![path.to_path_buf()]
     } else {
         Vec::new()
     }
+}
+
+fn explicit_file_included(path: &Path, filter: &FileFilter) -> bool {
+    router::is_supported(path) && filter.matches(path)
 }
 
 fn collect_files(

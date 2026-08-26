@@ -14,6 +14,7 @@ pub use feature::complexity::check::{
 };
 pub use feature::complexity::options::AnalysisOptions;
 pub use feature::complexity::resolve::Overrides;
+pub use feature::complexity::tree::{DirectoryNode, FileNode, TreeAnalysis, TreeNode};
 pub use feature::complexity::{Analysis, FileReport, PathError};
 
 use feature::complexity;
@@ -22,6 +23,13 @@ use feature::complexity;
 /// searched recursively) and reports cyclomatic complexity per function.
 pub fn analyze(paths: &[PathBuf], options: &AnalysisOptions) -> Analysis {
     complexity::analyze(paths, options)
+}
+
+/// Analyzes the source files at the given paths like [`analyze`], but
+/// preserving the directory structure each root was traversed through and
+/// which root each file came from.
+pub fn analyze_tree(paths: &[PathBuf], options: &AnalysisOptions) -> TreeAnalysis {
+    complexity::tree::analyze_tree(paths, options)
 }
 
 /// Resolves CLI flags against an optional `smell.toml` in `config_dir` into
