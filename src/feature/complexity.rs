@@ -15,6 +15,7 @@ pub mod options;
 pub mod resolve;
 pub mod router;
 
+#[derive(Debug, Clone)]
 pub struct FileReport {
     pub path: PathBuf,
     pub lines: usize,
@@ -22,6 +23,7 @@ pub struct FileReport {
 }
 
 /// A path passed to [`analyze`] that couldn't be read.
+#[derive(Debug)]
 pub struct PathError {
     pub path: PathBuf,
     pub error: io::Error,
@@ -29,6 +31,7 @@ pub struct PathError {
 
 /// The result of analyzing every given path: successful reports plus any
 /// per-path or per-file errors, so one bad path doesn't discard the rest.
+#[derive(Debug)]
 pub struct Analysis {
     pub reports: Vec<FileReport>,
     pub errors: Vec<PathError>,

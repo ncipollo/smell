@@ -12,6 +12,7 @@ pub mod rust;
 pub mod swift;
 pub mod typescript;
 
+#[derive(Debug, Clone)]
 pub struct FunctionComplexity {
     pub name: String,
     /// Cyclomatic complexity: a baseline of 1 plus one per branch.
@@ -19,6 +20,7 @@ pub struct FunctionComplexity {
 }
 
 /// A class/struct/enum/trait-like declaration and the functions it contains.
+#[derive(Debug, Clone)]
 pub struct TypeComplexity {
     pub name: String,
     /// Raw source text of the type's extends/implements/conformance/trait
@@ -28,12 +30,14 @@ pub struct TypeComplexity {
     pub functions: Vec<FunctionComplexity>,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileComplexity {
     /// Top-level functions not contained in any type.
     pub functions: Vec<FunctionComplexity>,
     pub types: Vec<TypeComplexity>,
 }
 
+#[derive(Debug, Clone)]
 pub struct ComplexityRollup {
     pub total: usize,
     pub max: usize,
