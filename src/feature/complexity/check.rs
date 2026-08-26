@@ -13,8 +13,8 @@ mod function_complexity;
 mod method_count;
 mod scope;
 
-/// The measures a run can enforce. Rendering (labels, JSON keys) lives in
-/// `cli`; this is a bare discriminant.
+/// The measures a run can enforce. Display prose (labels, JSON keys) lives in
+/// `cli`; `name()` below is the stable machine-readable identifier.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Measure {
     Complexity,
@@ -23,8 +23,23 @@ pub enum Measure {
     Declarations,
 }
 
+impl Measure {
+    /// A stable, lowercase identifier safe for library consumers to match on
+    /// or store. Distinct from the display prose in `cli`, which is free to
+    /// change.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Measure::Complexity => "complexity",
+            Measure::Methods => "methods",
+            Measure::Lines => "lines",
+            Measure::Declarations => "declarations",
+        }
+    }
+}
+
 /// A named subject inside a file that exceeded the limit: a function for
 /// complexity, a type for method count.
+#[derive(Debug, Clone)]
 pub struct Offender {
     pub name: String,
     pub value: usize,
@@ -32,6 +47,7 @@ pub struct Offender {
 
 /// What exceeded the limit in a failing file: named entries inside it
 /// (functions, types), or the file itself (line count).
+#[derive(Debug, Clone)]
 pub enum Subject {
     Entries(Vec<Offender>),
     File(usize),
@@ -49,6 +65,7 @@ impl Subject {
 }
 
 /// A file that failed a measure.
+#[derive(Debug, Clone)]
 pub struct CheckFailure {
     pub path: PathBuf,
     pub subject: Subject,
@@ -57,6 +74,7 @@ pub struct CheckFailure {
 /// The outcome of one *enabled* measure. Present with an empty `failures`
 /// when the measure ran and passed; absent entirely when no limit was
 /// configured for it (see `check`).
+#[derive(Debug, Clone)]
 pub struct CheckResult {
     pub measure: Measure,
     pub limit: usize,
@@ -114,6 +132,14 @@ mod tests {
                 types: vec![],
             },
         }
+    }
+
+    #[test]
+    fn measure_names_are_stable_identifiers() {
+        assert_eq!(Measure::Complexity.name(), "complexity");
+        assert_eq!(Measure::Methods.name(), "methods");
+        assert_eq!(Measure::Lines.name(), "lines");
+        assert_eq!(Measure::Declarations.name(), "declarations");
     }
 
     #[test]
