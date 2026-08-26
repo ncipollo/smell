@@ -14,6 +14,10 @@ pub struct FileFilter {
     /// `None` when no include patterns were given: everything is included.
     include: Option<GlobSet>,
     exclude: GlobSet,
+    /// Exclude patterns rewritten to match the directory they cover, e.g.
+    /// `**/target/**` also compiles as `**/target`. Lets a directory walk
+    /// skip a whole subtree instead of checking every file inside it.
+    exclude_trees: GlobSet,
 }
 
 impl Default for FileFilter {
@@ -21,6 +25,7 @@ impl Default for FileFilter {
         FileFilter {
             include: None,
             exclude: GlobSet::empty(),
+            exclude_trees: GlobSet::empty(),
         }
     }
 }
@@ -35,6 +40,7 @@ impl FileFilter {
         Ok(FileFilter {
             include,
             exclude: glob_set(exclude)?,
+            exclude_trees: glob_set(&subtree_patterns(exclude))?,
         })
     }
 
@@ -47,6 +53,25 @@ impl FileFilter {
             .is_none_or(|include| include.is_match(path));
         included && !self.exclude.is_match(path)
     }
+
+    /// Whether every path beneath this directory is excluded, so a walk can
+    /// skip descending into it. `path` must be relative to the analysis
+    /// root. Ignores include patterns (an include like `*.rs` never matches
+    /// a directory), so this can only prune directories [`matches`] would
+    /// have rejected anyway, never one it would have accepted.
+    pub fn excludes_subtree(&self, path: &Path) -> bool {
+        self.exclude_trees.is_match(path)
+    }
+}
+
+/// A `dir/**` exclude pattern covers every path beneath `dir`, so the
+/// directory itself can be matched directly. Patterns without that suffix
+/// say nothing about a whole subtree and are dropped.
+fn subtree_patterns(exclude: &[String]) -> Vec<String> {
+    exclude
+        .iter()
+        .filter_map(|pattern| pattern.strip_suffix("/**").map(str::to_string))
+        .collect()
 }
 
 /// Supertype names selected by `--implements`. A type matches when any of its
@@ -155,6 +180,32 @@ mod tests {
         let filter = FileFilter::new(&[], &strings(&["**/generated/**"])).expect("valid globs");
         assert!(filter.matches(Path::new("src/main.rs")));
         assert!(!filter.matches(Path::new("src/generated/api.rs")));
+    }
+
+    #[test]
+    fn excludes_subtree_matches_directory_covered_by_slash_star_star() {
+        let filter = FileFilter::new(&[], &strings(&["**/target/**"])).expect("valid globs");
+        assert!(filter.excludes_subtree(Path::new("target")));
+        assert!(filter.excludes_subtree(Path::new("nested/target")));
+    }
+
+    #[test]
+    fn excludes_subtree_ignores_pattern_without_slash_star_star_suffix() {
+        let filter = FileFilter::new(&[], &strings(&["target"])).expect("valid globs");
+        assert!(!filter.excludes_subtree(Path::new("target")));
+    }
+
+    #[test]
+    fn excludes_subtree_false_for_unrelated_directory() {
+        let filter = FileFilter::new(&[], &strings(&["**/target/**"])).expect("valid globs");
+        assert!(!filter.excludes_subtree(Path::new("src")));
+    }
+
+    #[test]
+    fn excludes_subtree_ignores_include_patterns() {
+        let filter =
+            FileFilter::new(&strings(&["*.rs"]), &strings(&["**/target/**"])).expect("valid globs");
+        assert!(filter.excludes_subtree(Path::new("target")));
     }
 
     #[test]
