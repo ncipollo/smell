@@ -129,7 +129,7 @@ mod tests {
                     name: "top".to_string(),
                     complexity,
                 }],
-                types: vec![],
+                ..Default::default()
             },
         }
     }

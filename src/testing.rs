@@ -59,3 +59,13 @@ pub fn type_summary(complexity: &FileComplexity) -> Vec<(String, Vec<(String, us
         })
         .collect()
 }
+
+/// Summarizes comment runs as 1-based, inclusive `(start_line, end_line)`
+/// pairs for assertions.
+pub fn comment_summary(complexity: &FileComplexity) -> Vec<(usize, usize)> {
+    complexity
+        .comments
+        .iter()
+        .map(|comment| (comment.start_line, comment.end_line))
+        .collect()
+}

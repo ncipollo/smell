@@ -301,7 +301,7 @@ mod tests {
         assert!(analysis.errors.is_empty());
         assert_eq!(
             flatten(&analysis, &root),
-            vec!["d .", "f complexity.rs", "f inherits.rs"]
+            vec!["d .", "f comments.rs", "f complexity.rs", "f inherits.rs"]
         );
     }
 
@@ -328,6 +328,7 @@ mod tests {
             vec![
                 "d .",
                 "d rust",
+                "f rust/comments.rs",
                 "f rust/complexity.rs",
                 "f rust/inherits.rs"
             ]
@@ -353,7 +354,7 @@ mod tests {
         assert!(analysis.errors.is_empty());
         assert_eq!(analysis.roots.len(), 2);
         match &analysis.roots[0] {
-            TreeNode::Directory(directory) => assert_eq!(directory.children.len(), 2),
+            TreeNode::Directory(directory) => assert_eq!(directory.children.len(), 3),
             TreeNode::File(_) => panic!("expected first root to be a directory"),
         }
         match &analysis.roots[1] {
@@ -363,7 +364,7 @@ mod tests {
             }
             TreeNode::Directory(_) => panic!("expected second root to be a file"),
         }
-        assert_eq!(analysis.reports().len(), 2);
+        assert_eq!(analysis.reports().len(), 3);
     }
 
     #[test]
@@ -401,7 +402,7 @@ mod tests {
         assert_eq!(analysis.errors[0].path, missing);
         assert_eq!(
             flatten(&analysis, &rust),
-            vec!["d .", "f complexity.rs", "f inherits.rs"]
+            vec!["d .", "f comments.rs", "f complexity.rs", "f inherits.rs"]
         );
     }
 
@@ -441,7 +442,7 @@ mod tests {
         assert!(analysis.errors.is_empty());
         assert_eq!(
             flatten(&analysis, &root),
-            vec!["d .", "f complexity.rs", "f inherits.rs"]
+            vec!["d .", "f comments.rs", "f complexity.rs", "f inherits.rs"]
         );
         for node in &analysis.roots {
             if let TreeNode::File(file) = node {

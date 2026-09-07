@@ -28,6 +28,8 @@ pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::BooleanOperator, "boolean_operator"),
 ];
 
+const COMMENT_KINDS: &[&str] = &["comment"];
+
 /// Parses Python source and returns the cyclomatic complexity of each
 /// function, grouped by containing class.
 pub fn file_complexity(source: &str, filter: &BranchFilter) -> FileComplexity {
@@ -58,6 +60,10 @@ impl LanguageRules for PythonRules {
 
     fn branch_rules(&self) -> &'static [BranchRule] {
         BRANCH_RULES
+    }
+
+    fn comment_kinds(&self) -> &'static [&'static str] {
+        COMMENT_KINDS
     }
 }
 
@@ -186,5 +192,42 @@ mod tests {
         let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
+    }
+
+    #[test]
+    fn file_complexity_reports_coalesced_comment_spans() {
+        let complexity = file_complexity(
+            &testing::fixture("python/comments.py"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::comment_summary(&complexity),
+            vec![(1, 1), (3, 5), (10, 10), (14, 14)]
+        );
+        assert_eq!(complexity.comment_nodes, 6);
+    }
+
+    #[test]
+    fn file_complexity_does_not_count_docstrings_as_comments() {
+        let complexity = file_complexity(
+            &testing::fixture("python/comments.py"),
+            &BranchFilter::default(),
+        );
+        let docstring_line = 9;
+        assert!(
+            testing::comment_summary(&complexity)
+                .iter()
+                .all(|&(start, end)| docstring_line < start || docstring_line > end)
+        );
+    }
+
+    #[test]
+    fn file_complexity_reports_no_comments_for_a_comment_free_file() {
+        let complexity = file_complexity(
+            &testing::fixture("python/complexity.py"),
+            &BranchFilter::default(),
+        );
+        assert!(complexity.comments.is_empty());
+        assert_eq!(complexity.comment_nodes, 0);
     }
 }

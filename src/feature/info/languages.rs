@@ -21,7 +21,11 @@ pub fn render() -> String {
         "LANGUAGE RULES\n\
          The tree-sitter node kinds each friendly kind maps to, per language.\n\
          A parenthesized note means the node only counts when that condition\n\
-         holds.\n",
+         holds.\n\
+         Comments are collected from each language's own comment node kinds,\n\
+         with comments on adjacent lines counted as one comment. Python\n\
+         docstrings are string literals rather than comments, so they are not\n\
+         counted.\n",
     );
     for (language, rules) in LANGUAGES {
         section.push_str(&format!("\n  {language}\n"));
@@ -64,5 +68,10 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn page_notes_python_docstrings_are_not_comments() {
+        assert!(render().contains("docstring"));
     }
 }

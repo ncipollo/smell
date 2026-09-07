@@ -171,7 +171,11 @@ fn format_reports(reports: &[FileReport], quiet: bool) -> String {
 enum Extra {
     None,
     Methods(usize),
-    File { lines: usize, declarations: usize },
+    File {
+        lines: usize,
+        declarations: usize,
+        comments: usize,
+    },
 }
 
 fn format_file(report: &FileReport) -> String {
@@ -203,6 +207,7 @@ fn format_file(report: &FileReport) -> String {
         Extra::File {
             lines: report.lines,
             declarations: report.complexity.declarations(),
+            comments: report.complexity.comment_count(),
         },
     );
     text.push_str(&format!("{table}\n\n"));
@@ -243,8 +248,9 @@ fn format_rollup(rollup: &ComplexityRollup, extra: Extra) -> String {
         Extra::File {
             lines,
             declarations,
+            comments,
         } => {
-            format!("{base} · lines {lines} · decls {declarations}")
+            format!("{base} · lines {lines} · decls {declarations} · comments {comments}")
         }
     }
 }
@@ -252,7 +258,7 @@ fn format_rollup(rollup: &ComplexityRollup, extra: Extra) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::code::{FileComplexity, TypeComplexity};
+    use crate::code::{CommentSpan, FileComplexity, TypeComplexity};
     use crate::feature::complexity::check::{CheckFailure, Offender};
 
     fn offender(name: &str, value: usize) -> Offender {
@@ -407,7 +413,11 @@ mod tests {
                     name: "top".to_string(),
                     complexity: 3,
                 }],
-                types: vec![],
+                comments: vec![CommentSpan {
+                    start_line: 1,
+                    end_line: 1,
+                }],
+                ..Default::default()
             },
         }]
     }
@@ -445,6 +455,16 @@ mod tests {
     }
 
     #[test]
+    fn format_reports_shows_comment_count_on_the_file_row() {
+        let text = format_reports(&sample_reports(), false);
+        let file_line = text
+            .lines()
+            .find(|line| line.contains("file"))
+            .expect("file rollup row");
+        assert!(file_line.contains("comments 1"));
+    }
+
+    #[test]
     fn format_reports_shows_method_count_on_type_rows_only() {
         let reports = vec![FileReport {
             path: PathBuf::from("src/a.rs"),
@@ -468,6 +488,7 @@ mod tests {
                         },
                     ],
                 }],
+                ..Default::default()
             },
         }];
         let text = format_reports(&reports, false);
