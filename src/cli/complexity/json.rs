@@ -149,6 +149,8 @@ struct Check {
     lines: Option<LinesCheck>,
     #[serde(skip_serializing_if = "Option::is_none")]
     declarations: Option<DeclarationsCheck>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comment_lines: Option<CommentLinesCheck>,
 }
 
 impl Check {
@@ -172,11 +174,16 @@ impl Check {
             .iter()
             .find(|result| result.measure == Measure::Declarations)
             .map(DeclarationsCheck::new);
+        let comment_lines = results
+            .iter()
+            .find(|result| result.measure == Measure::CommentLines)
+            .map(CommentLinesCheck::new);
         Some(Check {
             complexity,
             methods,
             lines,
             declarations,
+            comment_lines,
         })
     }
 }
@@ -336,6 +343,60 @@ impl DeclarationsFailure {
     }
 }
 
+#[derive(Serialize)]
+struct CommentLinesCheck {
+    limit: usize,
+    failures: Vec<CommentLinesFailure>,
+}
+
+impl CommentLinesCheck {
+    fn new(result: &CheckResult) -> Self {
+        CommentLinesCheck {
+            limit: result.limit,
+            failures: result
+                .failures
+                .iter()
+                .map(CommentLinesFailure::new)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CommentLinesFailure {
+    path: String,
+    comments: Vec<CommentOffender>,
+}
+
+impl CommentLinesFailure {
+    fn new(failure: &CheckFailure) -> Self {
+        CommentLinesFailure {
+            path: failure.path.display().to_string(),
+            comments: failure
+                .subject
+                .entries()
+                .iter()
+                .map(CommentOffender::new)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CommentOffender {
+    lines: String,
+    length: usize,
+}
+
+impl CommentOffender {
+    fn new(offender: &Offender) -> Self {
+        CommentOffender {
+            lines: offender.name.clone(),
+            length: offender.value,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io;
@@ -367,6 +428,20 @@ mod tests {
                 comments: vec![CommentSpan {
                     start_line: 1,
                     end_line: 1,
+                }],
+                ..Default::default()
+            },
+        }
+    }
+
+    fn report_with_a_long_comment() -> FileReport {
+        FileReport {
+            path: PathBuf::from("src/foo.rs"),
+            lines: 42,
+            complexity: FileComplexity {
+                comments: vec![CommentSpan {
+                    start_line: 3,
+                    end_line: 9,
                 }],
                 ..Default::default()
             },
@@ -538,6 +613,31 @@ mod tests {
     }
 
     #[test]
+    fn comment_lines_check_uses_lines_and_length_fields() {
+        let reports = [report_with_a_long_comment()];
+        let results = [CheckResult {
+            measure: Measure::CommentLines,
+            limit: 5,
+            failures: vec![entries_failure(
+                "src/foo.rs",
+                vec![offender("lines 3-9", 7)],
+            )],
+        }];
+        let document = parse(&reports, &results);
+        assert_eq!(
+            document["check"],
+            json!({
+                "comment_lines": {
+                    "limit": 5,
+                    "failures": [
+                        { "path": "src/foo.rs", "comments": [{ "lines": "lines 3-9", "length": 7 }] }
+                    ]
+                }
+            })
+        );
+    }
+
+    #[test]
     fn all_measures_are_present_when_all_are_configured() {
         let reports = [report_with_functions_and_types()];
         let results = [
@@ -561,12 +661,18 @@ mod tests {
                 limit: 20,
                 failures: vec![],
             },
+            CheckResult {
+                measure: Measure::CommentLines,
+                limit: 40,
+                failures: vec![],
+            },
         ];
         let document = parse(&reports, &results);
         assert!(document["check"]["complexity"].is_object());
         assert!(document["check"]["methods"].is_object());
         assert!(document["check"]["lines"].is_object());
         assert!(document["check"]["declarations"].is_object());
+        assert!(document["check"]["comment_lines"].is_object());
     }
 
     #[test]

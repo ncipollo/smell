@@ -137,6 +137,7 @@ fn label(measure: Measure) -> &'static str {
         Measure::Methods => "method count",
         Measure::Lines => "line count",
         Measure::Declarations => "declaration count",
+        Measure::CommentLines => "comment length",
     }
 }
 
@@ -364,6 +365,17 @@ mod tests {
         };
         let text = format_results(&[result], false);
         assert!(text.starts_with("✗ declaration count check failed: 1 file(s) exceed limit 5\n"));
+    }
+
+    #[test]
+    fn format_results_uses_the_comment_length_label() {
+        let result = CheckResult {
+            measure: Measure::CommentLines,
+            limit: 5,
+            failures: vec![entries_failure("src/a.rs", vec![offender("lines 3-9", 7)])],
+        };
+        let text = format_results(&[result], false);
+        assert!(text.starts_with("✗ comment length check failed: 1 file(s) exceed limit 5\n"));
     }
 
     #[test]
