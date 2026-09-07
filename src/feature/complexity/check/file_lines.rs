@@ -24,10 +24,7 @@ mod tests {
         FileReport {
             path: PathBuf::from(path),
             lines,
-            complexity: FileComplexity {
-                functions: Vec::new(),
-                types: Vec::new(),
-            },
+            complexity: FileComplexity::default(),
         }
     }
 

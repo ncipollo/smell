@@ -30,11 +30,32 @@ pub struct TypeComplexity {
     pub functions: Vec<FunctionComplexity>,
 }
 
-#[derive(Debug, Clone)]
+/// A run of comment lines: 1-based and inclusive, so a single-line comment
+/// has `start_line == end_line`. Adjacent single-line comments are coalesced
+/// into one span, so a run can cover a whole comment paragraph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommentSpan {
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
+impl CommentSpan {
+    pub fn lines(&self) -> usize {
+        self.end_line - self.start_line + 1
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct FileComplexity {
     /// Top-level functions not contained in any type.
     pub functions: Vec<FunctionComplexity>,
     pub types: Vec<TypeComplexity>,
+    /// Coalesced comment runs, in source order.
+    pub comments: Vec<CommentSpan>,
+    /// Comment nodes seen before coalescing adjacent runs together. Recorded
+    /// separately since coalescing is lossy: a ten-line `//` paragraph is one
+    /// span but ten nodes, and a future check may want either unit.
+    pub comment_nodes: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +86,16 @@ impl FileComplexity {
     /// Top-level declarations: types plus top-level functions.
     pub fn declarations(&self) -> usize {
         self.types.len() + self.functions.len()
+    }
+
+    /// Comment runs: a paragraph of adjacent comment lines counts once.
+    pub fn comment_count(&self) -> usize {
+        self.comments.len()
+    }
+
+    /// Lines occupied by comments, summed across every run.
+    pub fn comment_lines(&self) -> usize {
+        self.comments.iter().map(CommentSpan::lines).sum()
     }
 }
 
@@ -129,6 +160,7 @@ mod tests {
                 supertypes: Vec::new(),
                 functions: vec![function("area", 1), function("label", 7)],
             }],
+            ..Default::default()
         };
         let rollup = complexity.rollup();
         assert_eq!(rollup.total, 12);
@@ -145,16 +177,56 @@ mod tests {
                 supertypes: Vec::new(),
                 functions: vec![function("area", 1)],
             }],
+            ..Default::default()
         };
         assert_eq!(complexity.declarations(), 3);
     }
 
     #[test]
     fn declarations_of_empty_file_is_zero() {
-        let complexity = FileComplexity {
-            functions: Vec::new(),
-            types: Vec::new(),
-        };
+        let complexity = FileComplexity::default();
         assert_eq!(complexity.declarations(), 0);
+    }
+
+    #[test]
+    fn comment_span_lines_counts_inclusively() {
+        let span = CommentSpan {
+            start_line: 3,
+            end_line: 5,
+        };
+        assert_eq!(span.lines(), 3);
+    }
+
+    #[test]
+    fn comment_span_lines_of_a_single_line_is_one() {
+        let span = CommentSpan {
+            start_line: 4,
+            end_line: 4,
+        };
+        assert_eq!(span.lines(), 1);
+    }
+
+    #[test]
+    fn comment_count_is_zero_for_an_empty_file() {
+        assert_eq!(FileComplexity::default().comment_count(), 0);
+    }
+
+    #[test]
+    fn comment_lines_sums_across_runs() {
+        let complexity = FileComplexity {
+            comments: vec![
+                CommentSpan {
+                    start_line: 1,
+                    end_line: 1,
+                },
+                CommentSpan {
+                    start_line: 5,
+                    end_line: 7,
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(complexity.comment_count(), 2);
+        assert_eq!(complexity.comment_lines(), 4);
     }
 }

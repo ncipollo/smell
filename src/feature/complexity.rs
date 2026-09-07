@@ -212,20 +212,28 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                "csharp/comments.cs",
                 "csharp/complexity.cs",
                 "csharp/inherits.cs",
+                "java/Comments.java",
                 "java/Complexity.java",
                 "java/Inherits.java",
+                "javascript/comments.js",
                 "javascript/complexity.js",
                 "javascript/inherits.js",
+                "kotlin/comments.kt",
                 "kotlin/complexity.kt",
                 "kotlin/inherits.kt",
+                "python/comments.py",
                 "python/complexity.py",
                 "python/inherits.py",
+                "rust/comments.rs",
                 "rust/complexity.rs",
                 "rust/inherits.rs",
+                "swift/comments.swift",
                 "swift/complexity.swift",
                 "swift/inherits.swift",
+                "typescript/comments.ts",
                 "typescript/complexity.ts",
                 "typescript/complexity.tsx",
                 "typescript/inherits.ts",
@@ -243,6 +251,10 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                fixtures_dir()
+                    .join("rust/comments.rs")
+                    .display()
+                    .to_string(),
                 fixtures_dir()
                     .join("rust/complexity.rs")
                     .display()
@@ -367,6 +379,7 @@ mod tests {
         assert_eq!(
             relative_names(&analysis.reports),
             vec![
+                "rust/comments.rs",
                 "rust/complexity.rs",
                 "rust/inherits.rs",
                 "swift/complexity.swift"
@@ -384,7 +397,7 @@ mod tests {
         assert!(analysis.errors.is_empty());
         assert_eq!(
             relative_names(&analysis.reports),
-            vec!["rust/complexity.rs", "rust/inherits.rs"]
+            vec!["rust/comments.rs", "rust/complexity.rs", "rust/inherits.rs"]
         );
     }
 
@@ -397,7 +410,7 @@ mod tests {
         assert_eq!(analysis.errors[0].path, missing);
         assert_eq!(
             relative_names(&analysis.reports),
-            vec!["rust/complexity.rs", "rust/inherits.rs"]
+            vec!["rust/comments.rs", "rust/complexity.rs", "rust/inherits.rs"]
         );
     }
 }

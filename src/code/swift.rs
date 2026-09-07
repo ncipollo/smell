@@ -29,6 +29,8 @@ pub const BRANCH_RULES: &[BranchRule] = &[
 
 const TYPE_KINDS: &[&str] = &["class_declaration", "protocol_declaration"];
 
+const COMMENT_KINDS: &[&str] = &["comment", "multiline_comment"];
+
 /// Parses Swift source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
 pub fn file_complexity(source: &str, filter: &BranchFilter) -> FileComplexity {
@@ -60,6 +62,10 @@ impl LanguageRules for SwiftRules {
 
     fn branch_rules(&self) -> &'static [BranchRule] {
         BRANCH_RULES
+    }
+
+    fn comment_kinds(&self) -> &'static [&'static str] {
+        COMMENT_KINDS
     }
 }
 
@@ -246,5 +252,28 @@ mod tests {
         let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
+    }
+
+    #[test]
+    fn file_complexity_reports_coalesced_comment_spans() {
+        let complexity = file_complexity(
+            &testing::fixture("swift/comments.swift"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::comment_summary(&complexity),
+            vec![(1, 1), (3, 5), (7, 8), (10, 11), (13, 14), (18, 18)]
+        );
+        assert_eq!(complexity.comment_nodes, 10);
+    }
+
+    #[test]
+    fn file_complexity_reports_no_comments_for_a_comment_free_file() {
+        let complexity = file_complexity(
+            &testing::fixture("swift/complexity.swift"),
+            &BranchFilter::default(),
+        );
+        assert!(complexity.comments.is_empty());
+        assert_eq!(complexity.comment_nodes, 0);
     }
 }

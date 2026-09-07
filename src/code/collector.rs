@@ -8,6 +8,8 @@ use tree_sitter::{Language, Node, Parser};
 use crate::code::branch::{self, BranchFilter, BranchRule};
 use crate::code::{FileComplexity, FunctionComplexity, TypeComplexity};
 
+mod comments;
+
 /// A function a language identified during the walk; the collector counts it.
 pub struct FunctionDecl<'a> {
     pub name: String,
@@ -52,6 +54,9 @@ pub enum Visit<'a> {
 pub trait LanguageRules {
     fn visit<'a>(&self, node: Node<'a>, source: &str) -> Visit<'a>;
     fn branch_rules(&self) -> &'static [BranchRule];
+    /// The grammar's comment node kinds. The walk records their spans and
+    /// does not descend into them.
+    fn comment_kinds(&self) -> &'static [&'static str];
 }
 
 /// Parses the source with the given grammar and assembles the file complexity.
@@ -65,10 +70,7 @@ pub fn file_complexity(
     parser
         .set_language(language)
         .expect("failed to load grammar");
-    let mut file = FileComplexity {
-        functions: Vec::new(),
-        types: Vec::new(),
-    };
+    let mut file = FileComplexity::default();
     let Some(tree) = parser.parse(source, None) else {
         return file;
     };
@@ -84,6 +86,7 @@ pub fn file_complexity(
     // declarations can contribute supertypes; only types that ended up with
     // functions are reported.
     file.types.retain(|t| !t.functions.is_empty());
+    comments::coalesce(&mut file);
     file
 }
 
@@ -155,6 +158,10 @@ fn collect(
     type_stack: &mut Vec<String>,
     file: &mut FileComplexity,
 ) {
+    if comments::is_comment(node, rules.comment_kinds()) {
+        comments::record(node, file);
+        return;
+    }
     let opened_type = match rules.visit(node, source) {
         Visit::Skip => false,
         Visit::Type(decl) => {

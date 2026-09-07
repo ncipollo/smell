@@ -44,7 +44,11 @@ mod tests {
         FileReport {
             path: PathBuf::from(path),
             lines: 1,
-            complexity: FileComplexity { functions, types },
+            complexity: FileComplexity {
+                functions,
+                types,
+                ..Default::default()
+            },
         }
     }
 

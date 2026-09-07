@@ -29,6 +29,8 @@ pub const BRANCH_RULES: &[BranchRule] = &[
     ),
 ];
 
+const COMMENT_KINDS: &[&str] = &["comment", "html_comment"];
+
 /// Parses TypeScript source (the `.ts` grammar) and returns the cyclomatic
 /// complexity of each function, grouped by containing type.
 pub fn file_complexity(source: &str, filter: &BranchFilter) -> FileComplexity {
@@ -78,6 +80,10 @@ impl LanguageRules for TypeScriptRules {
 
     fn branch_rules(&self) -> &'static [BranchRule] {
         BRANCH_RULES
+    }
+
+    fn comment_kinds(&self) -> &'static [&'static str] {
+        COMMENT_KINDS
     }
 }
 
@@ -279,5 +285,46 @@ mod tests {
             testing::top_level_summary(&complexity),
             vec![("Greeting".to_string(), 3)]
         );
+    }
+
+    #[test]
+    fn file_complexity_reports_coalesced_comment_spans() {
+        let complexity = file_complexity(
+            &testing::fixture("typescript/comments.ts"),
+            &BranchFilter::default(),
+        );
+        assert_eq!(
+            testing::comment_summary(&complexity),
+            vec![
+                (1, 1),
+                (3, 3),
+                (5, 7),
+                (9, 10),
+                (12, 14),
+                (16, 17),
+                (21, 21)
+            ]
+        );
+        assert_eq!(complexity.comment_nodes, 10);
+    }
+
+    #[test]
+    fn file_complexity_reports_no_comments_for_a_comment_free_file() {
+        let complexity = file_complexity(
+            &testing::fixture("typescript/complexity.ts"),
+            &BranchFilter::default(),
+        );
+        assert!(complexity.comments.is_empty());
+        assert_eq!(complexity.comment_nodes, 0);
+    }
+
+    #[test]
+    fn tsx_file_complexity_reports_no_comments_for_a_comment_free_file() {
+        let complexity = tsx_file_complexity(
+            &testing::fixture("typescript/complexity.tsx"),
+            &BranchFilter::default(),
+        );
+        assert!(complexity.comments.is_empty());
+        assert_eq!(complexity.comment_nodes, 0);
     }
 }

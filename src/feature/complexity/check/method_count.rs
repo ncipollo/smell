@@ -53,8 +53,8 @@ mod tests {
             path: PathBuf::from(path),
             lines: 1,
             complexity: FileComplexity {
-                functions: Vec::new(),
                 types,
+                ..Default::default()
             },
         }
     }

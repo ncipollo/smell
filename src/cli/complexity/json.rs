@@ -48,6 +48,9 @@ struct File {
     path: String,
     lines: usize,
     declarations: usize,
+    /// Coalesced comment runs; adjacent comment lines count once. See
+    /// [`crate::code::FileComplexity::comment_count`].
+    comments: usize,
     types: Vec<Type>,
     functions: Vec<Function>,
     rollup: Rollup,
@@ -59,6 +62,7 @@ impl File {
             path: report.path.display().to_string(),
             lines: report.lines,
             declarations: report.complexity.declarations(),
+            comments: report.complexity.comment_count(),
             types: report.complexity.types.iter().map(Type::new).collect(),
             functions: report
                 .complexity
@@ -340,7 +344,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::code::{FileComplexity, FunctionComplexity};
+    use crate::code::{CommentSpan, FileComplexity, FunctionComplexity};
 
     fn function(name: &str, complexity: usize) -> FunctionComplexity {
         FunctionComplexity {
@@ -360,6 +364,11 @@ mod tests {
                     supertypes: vec!["Display".to_string()],
                     functions: vec![function("area", 3)],
                 }],
+                comments: vec![CommentSpan {
+                    start_line: 1,
+                    end_line: 1,
+                }],
+                ..Default::default()
             },
         }
     }
@@ -390,6 +399,7 @@ mod tests {
         assert_eq!(file["path"], "src/foo.rs");
         assert_eq!(file["lines"], 42);
         assert_eq!(file["declarations"], 2);
+        assert_eq!(file["comments"], 1);
         assert_eq!(
             file["functions"],
             json!([{ "name": "top_level", "complexity": 1 }])
