@@ -59,6 +59,11 @@ struct Cli {
     #[arg(long, value_name = "N")]
     max_comment_lines: Option<usize>,
 
+    /// Fail (exit non-zero) if any file's comment count exceeds this limit,
+    /// listing the offending files (see --info checks).
+    #[arg(long, value_name = "N")]
+    max_comments: Option<usize>,
+
     /// Use the named rule from smell.toml instead of the "default" rule.
     #[arg(long, value_name = "NAME")]
     rule: Option<String>,
@@ -91,6 +96,7 @@ pub fn run() -> ExitCode {
         max_lines,
         max_declarations,
         max_comment_lines,
+        max_comments,
         rule,
         quiet,
         json,
@@ -111,6 +117,7 @@ pub fn run() -> ExitCode {
             max_lines,
             max_declarations,
             max_comment_lines,
+            max_comments,
             rule,
         },
         quiet,
@@ -256,6 +263,19 @@ mod tests {
     fn max_comment_lines_defaults_to_none() {
         let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
         assert_eq!(cli.max_comment_lines, None);
+    }
+
+    #[test]
+    fn parses_max_comments() {
+        let cli = Cli::try_parse_from(["smell", "src", "--max-comments", "25"])
+            .expect("max comments should parse");
+        assert_eq!(cli.max_comments, Some(25));
+    }
+
+    #[test]
+    fn max_comments_defaults_to_none() {
+        let cli = Cli::try_parse_from(["smell", "src"]).expect("path should parse");
+        assert_eq!(cli.max_comments, None);
     }
 
     #[test]

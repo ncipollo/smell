@@ -8,12 +8,13 @@ fn limit_section() -> String {
     String::from(
         "LIMIT CHECKS\n\
          --max-complexity <N>, --max-methods <N>, --max-lines <N>,\n\
-         --max-declarations <N>, and --max-comment-lines <N> (or\n\
-         max_complexity/max_methods/max_lines/max_declarations/\n\
-         max_comment_lines in smell.toml) each make the run a check for\n\
-         their measure: complexity per function, method count per type,\n\
-         line count per file, declaration count per file (types plus\n\
-         top-level functions), comment run length per run. A check\n\
+         --max-declarations <N>, --max-comment-lines <N>, and\n\
+         --max-comments <N> (or max_complexity/max_methods/max_lines/\n\
+         max_declarations/max_comment_lines/max_comments in smell.toml)\n\
+         each make the run a check for their measure: complexity per\n\
+         function, method count per type, line count per file,\n\
+         declaration count per file (types plus top-level functions),\n\
+         comment run length per run, comment count per file. A check\n\
          exits non-zero when any analyzed subject's value is strictly\n\
          greater than N (equal to N passes), printing the offending\n\
          files and subjects to stderr after the normal report, one\n\
@@ -29,9 +30,10 @@ fn quiet_section() -> String {
         "QUIET MODE\n\
          --quiet (or -q) suppresses the per-file complexity report on\n\
          stdout. Errors and, when --max-complexity, --max-methods,\n\
-         --max-lines, --max-declarations, or --max-comment-lines is set,\n\
-         the failure report on stderr are still printed, so a quiet CI run\n\
-         stays silent on success and prints only what a failure requires.\n",
+         --max-lines, --max-declarations, --max-comment-lines, or\n\
+         --max-comments is set, the failure report on stderr are still\n\
+         printed, so a quiet CI run stays silent on success and prints\n\
+         only what a failure requires.\n",
     )
 }
 
@@ -64,6 +66,11 @@ mod tests {
     #[test]
     fn page_documents_max_comment_lines() {
         assert!(render().contains("--max-comment-lines"));
+    }
+
+    #[test]
+    fn page_documents_max_comments() {
+        assert!(render().contains("--max-comments"));
     }
 
     #[test]

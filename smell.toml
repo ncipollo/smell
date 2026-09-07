@@ -4,3 +4,4 @@ include = ["*.rs"]
 exclude = ["fixtures/**"]
 max_complexity = 15
 max_lines = 600
+max_comments = 25
