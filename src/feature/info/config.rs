@@ -11,6 +11,7 @@ max_complexity = 10
 max_methods = 8
 max_lines = 300
 max_declarations = 20
+max_comment_lines = 40
 ";
 
 pub fn render() -> String {
@@ -22,9 +23,9 @@ pub fn render() -> String {
          used if present, else the built-in defaults (a config file's mere\n\
          presence does not change a bare `smell <path>` invocation). Explicit\n\
          --include/--exclude/--branches/--implements/--max-complexity/\n\
-         --max-methods/--max-lines/--max-declarations flags replace a\n\
-         rule's value for that field entirely rather than merging with\n\
-         it.\n\n{CONFIG_EXAMPLE}"
+         --max-methods/--max-lines/--max-declarations/--max-comment-lines\n\
+         flags replace a rule's value for that field entirely rather than\n\
+         merging with it.\n\n{CONFIG_EXAMPLE}"
     )
 }
 

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::feature::complexity::FileReport;
 use crate::feature::complexity::options::AnalysisOptions;
 
+mod comment_lines;
 mod declaration_count;
 mod file_lines;
 mod function_complexity;
@@ -21,6 +22,7 @@ pub enum Measure {
     Methods,
     Lines,
     Declarations,
+    CommentLines,
 }
 
 impl Measure {
@@ -33,6 +35,7 @@ impl Measure {
             Measure::Methods => "methods",
             Measure::Lines => "lines",
             Measure::Declarations => "declarations",
+            Measure::CommentLines => "comment_lines",
         }
     }
 }
@@ -94,6 +97,7 @@ pub fn check(reports: &[FileReport], options: &AnalysisOptions) -> Vec<CheckResu
         (Measure::Methods, options.max_methods),
         (Measure::Lines, options.max_lines),
         (Measure::Declarations, options.max_declarations),
+        (Measure::CommentLines, options.max_comment_lines),
     ];
     configured
         .into_iter()
@@ -107,6 +111,7 @@ fn result(reports: &[FileReport], measure: Measure, limit: usize) -> CheckResult
         Measure::Methods => method_count::failures(reports, limit),
         Measure::Lines => file_lines::failures(reports, limit),
         Measure::Declarations => declaration_count::failures(reports, limit),
+        Measure::CommentLines => comment_lines::failures(reports, limit),
     };
     CheckResult {
         measure,
@@ -140,6 +145,7 @@ mod tests {
         assert_eq!(Measure::Methods.name(), "methods");
         assert_eq!(Measure::Lines.name(), "lines");
         assert_eq!(Measure::Declarations.name(), "declarations");
+        assert_eq!(Measure::CommentLines.name(), "comment_lines");
     }
 
     #[test]
@@ -169,14 +175,16 @@ mod tests {
             max_methods: Some(2),
             max_lines: Some(100),
             max_declarations: Some(3),
+            max_comment_lines: Some(4),
             ..AnalysisOptions::default()
         };
         let results = check(&reports, &options);
-        assert_eq!(results.len(), 4);
+        assert_eq!(results.len(), 5);
         assert_eq!(results[0].measure, Measure::Complexity);
         assert_eq!(results[1].measure, Measure::Methods);
         assert_eq!(results[2].measure, Measure::Lines);
         assert_eq!(results[3].measure, Measure::Declarations);
+        assert_eq!(results[4].measure, Measure::CommentLines);
     }
 
     #[test]
