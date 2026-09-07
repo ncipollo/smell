@@ -138,6 +138,7 @@ fn label(measure: Measure) -> &'static str {
         Measure::Lines => "line count",
         Measure::Declarations => "declaration count",
         Measure::CommentLines => "comment length",
+        Measure::Comments => "comment count",
     }
 }
 
@@ -365,6 +366,20 @@ mod tests {
         };
         let text = format_results(&[result], false);
         assert!(text.starts_with("✗ declaration count check failed: 1 file(s) exceed limit 5\n"));
+    }
+
+    #[test]
+    fn format_results_uses_the_comment_count_label() {
+        let result = CheckResult {
+            measure: Measure::Comments,
+            limit: 5,
+            failures: vec![CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                subject: Subject::File(6),
+            }],
+        };
+        let text = format_results(&[result], false);
+        assert!(text.starts_with("✗ comment count check failed: 1 file(s) exceed limit 5\n"));
     }
 
     #[test]

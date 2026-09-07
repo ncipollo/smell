@@ -20,6 +20,7 @@ pub struct Overrides {
     pub max_lines: Option<usize>,
     pub max_declarations: Option<usize>,
     pub max_comment_lines: Option<usize>,
+    pub max_comments: Option<usize>,
     pub rule: Option<String>,
 }
 
@@ -49,6 +50,7 @@ fn merge(config: Option<Config>, overrides: &Overrides, dir: &Path) -> io::Resul
         max_lines: overrides.max_lines.or(rule.max_lines),
         max_declarations: overrides.max_declarations.or(rule.max_declarations),
         max_comment_lines: overrides.max_comment_lines.or(rule.max_comment_lines),
+        max_comments: overrides.max_comments.or(rule.max_comments),
     })
 }
 
@@ -394,6 +396,30 @@ mod tests {
         };
         let options = merge(Some(config), &overrides, &dir()).expect("resolves");
         assert_eq!(options.max_comment_lines, Some(2));
+    }
+
+    #[test]
+    fn no_config_no_flags_sets_no_comments_limit() {
+        let options = merge(None, &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_comments, None);
+    }
+
+    #[test]
+    fn rule_max_comments_applies() {
+        let config = config_from("[[rule]]\nmax_comments = 5\n");
+        let options = merge(Some(config), &Overrides::default(), &dir()).expect("resolves");
+        assert_eq!(options.max_comments, Some(5));
+    }
+
+    #[test]
+    fn flag_max_comments_replaces_rule_max_comments() {
+        let config = config_from("[[rule]]\nmax_comments = 5\n");
+        let overrides = Overrides {
+            max_comments: Some(2),
+            ..Overrides::default()
+        };
+        let options = merge(Some(config), &overrides, &dir()).expect("resolves");
+        assert_eq!(options.max_comments, Some(2));
     }
 
     #[test]

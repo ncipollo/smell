@@ -20,4 +20,6 @@ pub struct AnalysisOptions {
     pub max_declarations: Option<usize>,
     /// When set, any comment run with more lines than this fails the run.
     pub max_comment_lines: Option<usize>,
+    /// When set, any file with more comments than this fails the run.
+    pub max_comments: Option<usize>,
 }

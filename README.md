@@ -42,6 +42,7 @@ smell src --max-methods 15                              # exit non-zero if any t
 smell src --max-lines 300                               # exit non-zero if any file has more than 300 lines
 smell src --max-declarations 10                         # exit non-zero if any file has more than 10 declarations
 smell src --max-comment-lines 40                        # exit non-zero if any comment run has more than 40 lines
+smell src --max-comments 25                             # exit non-zero if any file has more than 25 comments
 ```
 
 `--include`/`--exclude` and `--implements` are repeatable. Run `smell --info` for a directory of documentation topics (usage, config, languages, branches, filters, checks), or `smell --info branches` to drill straight into one.
@@ -61,6 +62,7 @@ max_methods = 15
 max_lines = 300
 max_declarations = 20
 max_comment_lines = 40
+max_comments = 25
 
 [[rule]]
 name = "swift"
