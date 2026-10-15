@@ -2,8 +2,10 @@ use tree_sitter::Node;
 
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
+use crate::code::call::CallRule;
 use crate::code::collector;
 use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
+use crate::code::mutation::MutationRule;
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_statement"),
@@ -62,6 +64,17 @@ const ACCESSOR_OWNER_KINDS: &[&str] = &[
 
 const COMMENT_KINDS: &[&str] = &["comment"];
 
+const CALL_RULES: &[CallRule] = &[CallRule::new("invocation_expression")];
+
+const MUTATION_RULES: &[MutationRule] = &[
+    // Unifies `=` and compound assignment (`+=`, etc., including `??=`) already.
+    MutationRule::new("assignment_expression"),
+    // These nodes also cover non-mutating unary operators (`-x`, `!x`), so
+    // only `++`/`--` count as a mutation.
+    MutationRule::when("prefix_unary_expression", is_increment_or_decrement),
+    MutationRule::when("postfix_unary_expression", is_increment_or_decrement),
+];
+
 /// Parses C# source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
 pub fn file_complexity(source: &str, filter: &BranchFilter) -> FileComplexity {
@@ -107,6 +120,14 @@ impl LanguageRules for CSharpRules {
     fn comment_kinds(&self) -> &'static [&'static str] {
         COMMENT_KINDS
     }
+
+    fn call_rules(&self) -> &'static [CallRule] {
+        CALL_RULES
+    }
+
+    fn mutation_rules(&self) -> &'static [MutationRule] {
+        MUTATION_RULES
+    }
 }
 
 fn is_boolean_operator(node: Node, _source: &str) -> bool {
@@ -122,6 +143,14 @@ fn is_null_coalescing(node: Node, _source: &str) -> bool {
 fn is_null_coalescing_assignment(node: Node, _source: &str) -> bool {
     node.child_by_field_name("operator")
         .is_some_and(|operator| operator.kind() == "??=")
+}
+
+/// `prefix_unary_expression`/`postfix_unary_expression` have no `operator`
+/// field — the operator is an unnamed direct-child token.
+fn is_increment_or_decrement(node: Node, _source: &str) -> bool {
+    let mut cursor = node.walk();
+    node.children(&mut cursor)
+        .any(|child| matches!(child.kind(), "++" | "--"))
 }
 
 /// A declaration only counts when it has a body: interface signatures,
@@ -367,6 +396,25 @@ mod tests {
         let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
+    }
+
+    #[test]
+    fn file_complexity_counts_calls_and_mutations() {
+        let source = "class C {\n\
+             void F() {\n\
+             int y = Foo();\n\
+             y = y + 1;\n\
+             y += 1;\n\
+             y++;\n\
+             Bar();\n\
+             }\n\
+             }\n";
+        let complexity = file_complexity(source, &BranchFilter::default());
+        // calls: Foo(), Bar(). mutations: y = ..., y += ..., y++.
+        assert_eq!(
+            testing::type_activity_summary(&complexity),
+            vec![("C".to_string(), vec![("F".to_string(), 2, 3)])]
+        );
     }
 
     #[test]

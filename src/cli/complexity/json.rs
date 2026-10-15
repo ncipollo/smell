@@ -155,6 +155,8 @@ mod tests {
         FunctionComplexity {
             name: name.to_string(),
             complexity,
+            calls: 0,
+            mutations: 0,
         }
     }
 

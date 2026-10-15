@@ -193,6 +193,8 @@ mod tests {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),
                     complexity: 3,
+                    calls: 0,
+                    mutations: 0,
                 }],
                 comments: vec![CommentSpan {
                     start_line: 1,
@@ -254,6 +256,8 @@ mod tests {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),
                     complexity: 1,
+                    calls: 0,
+                    mutations: 0,
                 }],
                 types: vec![TypeComplexity {
                     name: "Shape".to_string(),
@@ -262,10 +266,14 @@ mod tests {
                         FunctionComplexity {
                             name: "area".to_string(),
                             complexity: 1,
+                            calls: 0,
+                            mutations: 0,
                         },
                         FunctionComplexity {
                             name: "label".to_string(),
                             complexity: 1,
+                            calls: 0,
+                            mutations: 0,
                         },
                     ],
                 }],

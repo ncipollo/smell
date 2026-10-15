@@ -16,7 +16,9 @@ pub use feature::complexity::options::AnalysisOptions;
 pub use feature::complexity::resolve::Overrides;
 pub use feature::complexity::tree::{DirectoryNode, FileNode, TreeAnalysis, TreeNode};
 pub use feature::complexity::{Analysis, FileReport, PathError};
-pub use feature::diff::{DiffError, DiffPathError, DiffReport, DiffStatus, FileDiff, FunctionDiff};
+pub use feature::diff::{
+    DiffError, DiffPathError, DiffReport, DiffStatus, FileDiff, FlatActivity, FunctionDiff,
+};
 
 use feature::complexity;
 

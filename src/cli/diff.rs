@@ -10,7 +10,7 @@ use crate::CheckResult;
 use crate::cli::check_format::format_results;
 use crate::diff;
 use crate::feature::diff::delta::{self, DeltaOptions};
-use crate::feature::diff::{DiffReport, DiffStatus, FileDiff, FunctionDiff};
+use crate::feature::diff::{DiffReport, DiffStatus, FileDiff, FlatActivity, FunctionDiff};
 
 pub struct DiffRunArgs {
     pub repo: PathBuf,
@@ -94,7 +94,8 @@ fn name(function: &FunctionDiff) -> String {
     }
 }
 
-/// `None` for an unchanged function, which the table omits entirely.
+/// `None` for an unchanged function with no flagged activity, which the
+/// table omits entirely.
 fn row(function: &FunctionDiff) -> Option<[String; 5]> {
     let (status, before, after, delta) = match function.status {
         DiffStatus::Added { complexity } => (
@@ -115,9 +116,37 @@ fn row(function: &FunctionDiff) -> Option<[String; 5]> {
             after.to_string(),
             format!("{:+}", after as i64 - before as i64),
         ),
-        DiffStatus::Unchanged { .. } => return None,
+        DiffStatus::Unchanged { complexity } => return flat_active_row(function, complexity),
     };
     Some([name(function), status.to_string(), before, after, delta])
+}
+
+/// A flagged "flat but active" row: complexity is honestly `"unchanged"`
+/// (that status didn't move), but the Δ column explains why the row wasn't
+/// dropped — a call or mutation count moved that complexity can't see. Rows
+/// with no flagged activity stay `None`, omitted exactly as before.
+fn flat_active_row(function: &FunctionDiff, complexity: usize) -> Option<[String; 5]> {
+    let activity = function.flat_active?;
+    Some([
+        name(function),
+        "unchanged".to_string(),
+        complexity.to_string(),
+        complexity.to_string(),
+        activity_note(&activity),
+    ])
+}
+
+/// e.g. `"calls +2, mutations +1"`, omitting either clause whose delta is
+/// zero (one of the two is always nonzero, so this is never empty).
+fn activity_note(activity: &FlatActivity) -> String {
+    let mut parts = Vec::new();
+    if activity.calls_delta() != 0 {
+        parts.push(format!("calls {:+}", activity.calls_delta()));
+    }
+    if activity.mutations_delta() != 0 {
+        parts.push(format!("mutations {:+}", activity.mutations_delta()));
+    }
+    parts.join(", ")
 }
 
 #[cfg(test)]
@@ -129,6 +158,16 @@ mod tests {
             type_name: type_name.map(str::to_string),
             name: name.to_string(),
             status,
+            flat_active: None,
+        }
+    }
+
+    fn flat_active_function(name: &str, complexity: usize, activity: FlatActivity) -> FunctionDiff {
+        FunctionDiff {
+            type_name: None,
+            name: name.to_string(),
+            status: DiffStatus::Unchanged { complexity },
+            flat_active: Some(activity),
         }
     }
 
@@ -208,6 +247,51 @@ mod tests {
     fn row_is_none_for_unchanged() {
         let diff = function(None, "a", DiffStatus::Unchanged { complexity: 1 });
         assert!(row(&diff).is_none());
+    }
+
+    #[test]
+    fn row_shows_a_flat_active_function_instead_of_omitting_it() {
+        let diff = flat_active_function(
+            "a",
+            1,
+            FlatActivity {
+                calls_before: 2,
+                calls_after: 4,
+                mutations_before: 0,
+                mutations_after: 0,
+            },
+        );
+        let cells = row(&diff).unwrap();
+        assert_eq!(
+            cells,
+            [
+                "a".to_string(),
+                "unchanged".to_string(),
+                "1".to_string(),
+                "1".to_string(),
+                "calls +2".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn format_files_renders_flat_active_functions_instead_of_omitting_them() {
+        let files = [file_diff(
+            "src/a.rs",
+            vec![flat_active_function(
+                "a",
+                1,
+                FlatActivity {
+                    calls_before: 0,
+                    calls_after: 0,
+                    mutations_before: 1,
+                    mutations_after: 2,
+                },
+            )],
+        )];
+        let text = format_files(&files);
+        assert!(text.contains("mutations +1"));
+        assert!(!text.contains("omitted"));
     }
 
     fn empty_report() -> DiffReport {

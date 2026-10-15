@@ -138,6 +138,8 @@ mod tests {
                 functions: vec![FunctionComplexity {
                     name: "top".to_string(),
                     complexity,
+                    calls: 0,
+                    mutations: 0,
                 }],
                 ..Default::default()
             },

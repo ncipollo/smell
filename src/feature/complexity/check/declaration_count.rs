@@ -25,6 +25,8 @@ mod tests {
         FunctionComplexity {
             name: name.to_string(),
             complexity: 1,
+            calls: 0,
+            mutations: 0,
         }
     }
 

@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::code::FileComplexity;
+use crate::code::{FileComplexity, FunctionComplexity};
 
 /// (enclosing type name, or `None` for a top-level function; function name).
 /// `FunctionComplexity` has no line span or other stable id, so this pair is
@@ -29,11 +29,46 @@ impl DiffStatus {
     }
 }
 
+/// Call and mutation counts on both sides of a function whose complexity
+/// (and therefore [`DiffStatus`]) didn't move — cyclomatic complexity can't
+/// see a new call or assignment, so this is the signal that catches it.
+/// Only ever set alongside `DiffStatus::Unchanged`, and only when at least
+/// one of the two counts actually moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlatActivity {
+    pub calls_before: usize,
+    pub calls_after: usize,
+    pub mutations_before: usize,
+    pub mutations_after: usize,
+}
+
+impl FlatActivity {
+    pub fn calls_delta(&self) -> i64 {
+        self.calls_after as i64 - self.calls_before as i64
+    }
+
+    pub fn mutations_delta(&self) -> i64 {
+        self.mutations_after as i64 - self.mutations_before as i64
+    }
+
+    fn of(before: &FunctionComplexity, after: &FunctionComplexity) -> Option<FlatActivity> {
+        let activity = FlatActivity {
+            calls_before: before.calls,
+            calls_after: after.calls,
+            mutations_before: before.mutations,
+            mutations_after: after.mutations,
+        };
+        let changed = activity.calls_delta() != 0 || activity.mutations_delta() != 0;
+        changed.then_some(activity)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDiff {
     pub type_name: Option<String>,
     pub name: String,
     pub status: DiffStatus,
+    pub flat_active: Option<FlatActivity>,
 }
 
 /// Matches functions across the two sides by (enclosing type name, function
@@ -66,45 +101,77 @@ pub fn classify_file(
         .collect()
 }
 
-fn bucket(complexity: Option<&FileComplexity>) -> HashMap<Key, Vec<usize>> {
-    let mut map: HashMap<Key, Vec<usize>> = HashMap::new();
+fn bucket(complexity: Option<&FileComplexity>) -> HashMap<Key, Vec<FunctionComplexity>> {
+    let mut map: HashMap<Key, Vec<FunctionComplexity>> = HashMap::new();
     let Some(complexity) = complexity else {
         return map;
     };
     for function in &complexity.functions {
         map.entry((None, function.name.clone()))
             .or_default()
-            .push(function.complexity);
+            .push(function.clone());
     }
     for complexity_type in &complexity.types {
         for function in &complexity_type.functions {
             map.entry((Some(complexity_type.name.clone()), function.name.clone()))
                 .or_default()
-                .push(function.complexity);
+                .push(function.clone());
         }
     }
     map
 }
 
-/// Pairs up the (possibly multiple, for overloads) complexities recorded
-/// under one key on each side positionally, emitting one diff per pair plus
-/// one per unmatched surplus entry on either side.
-fn pair(key: Key, old: Option<&Vec<usize>>, new: Option<&Vec<usize>>) -> Vec<FunctionDiff> {
+/// Pairs up the (possibly multiple, for overloads) functions recorded under
+/// one key on each side positionally, emitting one diff per pair plus one
+/// per unmatched surplus entry on either side.
+fn pair(
+    key: Key,
+    old: Option<&Vec<FunctionComplexity>>,
+    new: Option<&Vec<FunctionComplexity>>,
+) -> Vec<FunctionDiff> {
     let old = old.map(Vec::as_slice).unwrap_or(&[]);
     let new = new.map(Vec::as_slice).unwrap_or(&[]);
     let paired = old.len().min(new.len());
 
     let mut diffs = Vec::new();
     for i in 0..paired {
-        diffs.push(function_diff(&key, status_for(old[i], new[i])));
+        diffs.push(changed_or_unchanged(&key, &old[i], &new[i]));
     }
-    for &complexity in &old[paired..] {
-        diffs.push(function_diff(&key, DiffStatus::Removed { complexity }));
+    for function in &old[paired..] {
+        diffs.push(function_diff(
+            &key,
+            DiffStatus::Removed {
+                complexity: function.complexity,
+            },
+            None,
+        ));
     }
-    for &complexity in &new[paired..] {
-        diffs.push(function_diff(&key, DiffStatus::Added { complexity }));
+    for function in &new[paired..] {
+        diffs.push(function_diff(
+            &key,
+            DiffStatus::Added {
+                complexity: function.complexity,
+            },
+            None,
+        ));
     }
     diffs
+}
+
+/// Classifies a matched pair by complexity, and — only when that leaves the
+/// pair `Unchanged` — layers on [`FlatActivity`] if calls or mutations moved
+/// anyway (see its docs for why that case needs a second signal).
+fn changed_or_unchanged(
+    key: &Key,
+    before: &FunctionComplexity,
+    after: &FunctionComplexity,
+) -> FunctionDiff {
+    let status = status_for(before.complexity, after.complexity);
+    let flat_active = match status {
+        DiffStatus::Unchanged { .. } => FlatActivity::of(before, after),
+        _ => None,
+    };
+    function_diff(key, status, flat_active)
 }
 
 fn status_for(before: usize, after: usize) -> DiffStatus {
@@ -115,11 +182,12 @@ fn status_for(before: usize, after: usize) -> DiffStatus {
     }
 }
 
-fn function_diff(key: &Key, status: DiffStatus) -> FunctionDiff {
+fn function_diff(key: &Key, status: DiffStatus, flat_active: Option<FlatActivity>) -> FunctionDiff {
     FunctionDiff {
         type_name: key.0.clone(),
         name: key.1.clone(),
         status,
+        flat_active,
     }
 }
 
@@ -129,9 +197,20 @@ mod tests {
     use crate::code::{FunctionComplexity, TypeComplexity};
 
     fn function(name: &str, complexity: usize) -> FunctionComplexity {
+        active_function(name, complexity, 0, 0)
+    }
+
+    fn active_function(
+        name: &str,
+        complexity: usize,
+        calls: usize,
+        mutations: usize,
+    ) -> FunctionComplexity {
         FunctionComplexity {
             name: name.to_string(),
             complexity,
+            calls,
+            mutations,
         }
     }
 
@@ -164,6 +243,7 @@ mod tests {
                 type_name: None,
                 name: "a".to_string(),
                 status: DiffStatus::Added { complexity: 1 },
+                flat_active: None,
             }]
         );
     }
@@ -178,6 +258,7 @@ mod tests {
                 type_name: None,
                 name: "a".to_string(),
                 status: DiffStatus::Removed { complexity: 1 },
+                flat_active: None,
             }]
         );
     }
@@ -214,6 +295,7 @@ mod tests {
                 type_name: None,
                 name: "a".to_string(),
                 status: DiffStatus::Unchanged { complexity: 4 },
+                flat_active: None,
             }]
         );
     }
@@ -325,5 +407,53 @@ mod tests {
             .delta(),
             -4
         );
+    }
+
+    #[test]
+    fn flat_active_is_none_when_calls_and_mutations_are_unchanged() {
+        let old = file(vec![active_function("a", 1, 2, 3)], vec![]);
+        let new = file(vec![active_function("a", 1, 2, 3)], vec![]);
+        let diffs = classify_file(Some(&old), Some(&new));
+        assert_eq!(find(&diffs, None, "a").flat_active, None);
+    }
+
+    #[test]
+    fn flat_active_is_set_when_calls_change_but_complexity_does_not() {
+        let old = file(vec![active_function("a", 1, 2, 0)], vec![]);
+        let new = file(vec![active_function("a", 1, 4, 0)], vec![]);
+        let diffs = classify_file(Some(&old), Some(&new));
+        let flat_active = find(&diffs, None, "a").flat_active.expect("flagged");
+        assert_eq!(flat_active.calls_delta(), 2);
+        assert_eq!(flat_active.mutations_delta(), 0);
+    }
+
+    #[test]
+    fn flat_active_is_set_when_mutations_change_but_complexity_does_not() {
+        let old = file(vec![active_function("a", 1, 0, 1)], vec![]);
+        let new = file(vec![active_function("a", 1, 0, 3)], vec![]);
+        let diffs = classify_file(Some(&old), Some(&new));
+        let flat_active = find(&diffs, None, "a").flat_active.expect("flagged");
+        assert_eq!(flat_active.calls_delta(), 0);
+        assert_eq!(flat_active.mutations_delta(), 2);
+    }
+
+    #[test]
+    fn flat_active_is_none_for_a_genuinely_changed_function() {
+        // Complexity moved too, so the ordinary `Changed` status already
+        // surfaces this function — flat_active only matters when complexity
+        // alone would have hidden it.
+        let old = file(vec![active_function("a", 1, 2, 0)], vec![]);
+        let new = file(vec![active_function("a", 2, 4, 0)], vec![]);
+        let diffs = classify_file(Some(&old), Some(&new));
+        assert_eq!(find(&diffs, None, "a").flat_active, None);
+    }
+
+    #[test]
+    fn flat_active_is_none_for_added_or_removed_functions() {
+        let old = file(vec![active_function("gone", 1, 1, 1)], vec![]);
+        let new = file(vec![active_function("new", 1, 1, 1)], vec![]);
+        let diffs = classify_file(Some(&old), Some(&new));
+        assert_eq!(find(&diffs, None, "gone").flat_active, None);
+        assert_eq!(find(&diffs, None, "new").flat_active, None);
     }
 }

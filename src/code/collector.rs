@@ -6,7 +6,7 @@
 use tree_sitter::{Language, Node, Parser};
 
 use crate::code::branch::{self, BranchFilter, BranchRule};
-use crate::code::{FileComplexity, FunctionComplexity, TypeComplexity};
+use crate::code::{FileComplexity, FunctionComplexity, TypeComplexity, call, mutation};
 
 mod comments;
 
@@ -57,6 +57,61 @@ pub trait LanguageRules {
     /// The grammar's comment node kinds. The walk records their spans and
     /// does not descend into them.
     fn comment_kinds(&self) -> &'static [&'static str];
+    fn call_rules(&self) -> &'static [SignalRule];
+    fn mutation_rules(&self) -> &'static [SignalRule];
+}
+
+/// One node-kind rule for a flat, per-function signal that (unlike a branch)
+/// needs no friendly cross-language kind or `--branches`-style selection —
+/// just a count. Optionally gated by a dynamic condition, for a grammar that
+/// reuses one node kind for more than one meaning (Rust's `&expr` vs.
+/// `&mut expr`; Kotlin's unary-operator node covering both negation and
+/// `++`/`--`). Shared by every such signal (calls, mutations, and any future
+/// one) so adding one is a new per-language rule table and trait accessor,
+/// not a new rule type and walk.
+pub struct SignalRule {
+    pub node_kind: &'static str,
+    pub condition: Option<fn(Node, &str) -> bool>,
+}
+
+impl SignalRule {
+    /// A rule that matches every node of the given kind.
+    pub const fn new(node_kind: &'static str) -> SignalRule {
+        SignalRule {
+            node_kind,
+            condition: None,
+        }
+    }
+
+    /// A rule gated by a dynamic condition.
+    pub const fn when(node_kind: &'static str, condition: fn(Node, &str) -> bool) -> SignalRule {
+        SignalRule {
+            node_kind,
+            condition: Some(condition),
+        }
+    }
+}
+
+/// Counts nodes within (but not including) `node` matching any rule.
+pub fn count_signal(node: Node, source: &str, rules: &[SignalRule]) -> usize {
+    let mut count = 0;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if is_signal(child, source, rules) {
+            count += 1;
+        }
+        count += count_signal(child, source, rules);
+    }
+    count
+}
+
+fn is_signal(node: Node, source: &str, rules: &[SignalRule]) -> bool {
+    rules.iter().any(|rule| {
+        rule.node_kind == node.kind()
+            && rule
+                .condition
+                .is_none_or(|condition| condition(node, source))
+    })
 }
 
 /// Parses the source with the given grammar and assembles the file complexity.
@@ -196,6 +251,8 @@ fn count_functions(
         .map(|decl| FunctionComplexity {
             name: decl.name,
             complexity: complexity(decl.body, source, rules, filter),
+            calls: call::count(decl.body, source, rules.call_rules()),
+            mutations: mutation::count(decl.body, source, rules.mutation_rules()),
         })
         .collect()
 }

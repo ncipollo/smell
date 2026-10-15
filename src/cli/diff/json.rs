@@ -4,7 +4,9 @@
 use serde::Serialize;
 
 use crate::CheckResult;
-use crate::feature::diff::{DiffPathError, DiffReport, DiffStatus, FileDiff, FunctionDiff};
+use crate::feature::diff::{
+    DiffPathError, DiffReport, DiffStatus, FileDiff, FlatActivity, FunctionDiff,
+};
 
 mod check;
 
@@ -67,6 +69,10 @@ struct Function {
     name: String,
     #[serde(flatten)]
     status: Status,
+    /// Set when `status` is `unchanged` but calls or mutations moved — a
+    /// "flat but active" change complexity alone can't see.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flat_active: Option<FlatActiveDto>,
 }
 
 impl Function {
@@ -75,6 +81,37 @@ impl Function {
             type_name: function.type_name.clone(),
             name: function.name.clone(),
             status: Status::new(&function.status),
+            flat_active: function.flat_active.as_ref().map(FlatActiveDto::new),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct FlatActiveDto {
+    calls: Delta,
+    mutations: Delta,
+}
+
+#[derive(Serialize)]
+struct Delta {
+    before: usize,
+    after: usize,
+    delta: i64,
+}
+
+impl FlatActiveDto {
+    fn new(activity: &FlatActivity) -> Self {
+        FlatActiveDto {
+            calls: Delta {
+                before: activity.calls_before,
+                after: activity.calls_after,
+                delta: activity.calls_delta(),
+            },
+            mutations: Delta {
+                before: activity.mutations_before,
+                after: activity.mutations_after,
+                delta: activity.mutations_delta(),
+            },
         }
     }
 }
@@ -130,6 +167,7 @@ mod tests {
             type_name: type_name.map(str::to_string),
             name: name.to_string(),
             status,
+            flat_active: None,
         }
     }
 
@@ -174,6 +212,42 @@ mod tests {
         assert_eq!(
             file["functions"][3],
             json!({ "name": "same", "status": "unchanged", "complexity": 1 })
+        );
+    }
+
+    #[test]
+    fn renders_flat_active_as_a_sibling_of_an_unchanged_status() {
+        let report = DiffReport {
+            files: vec![FileDiff {
+                path: PathBuf::from("src/a.rs"),
+                old: None,
+                new: None,
+                functions: vec![FunctionDiff {
+                    type_name: None,
+                    name: "a".to_string(),
+                    status: DiffStatus::Unchanged { complexity: 1 },
+                    flat_active: Some(FlatActivity {
+                        calls_before: 2,
+                        calls_after: 4,
+                        mutations_before: 1,
+                        mutations_after: 1,
+                    }),
+                }],
+            }],
+            errors: vec![],
+        };
+        let document = parse(&report);
+        assert_eq!(
+            document["files"][0]["functions"][0],
+            json!({
+                "name": "a",
+                "status": "unchanged",
+                "complexity": 1,
+                "flat_active": {
+                    "calls": { "before": 2, "after": 4, "delta": 2 },
+                    "mutations": { "before": 1, "after": 1, "delta": 0 },
+                }
+            })
         );
     }
 
