@@ -11,9 +11,11 @@ use crate::cli::pr;
 use crate::feature::diff::delta::DeltaOptions;
 
 mod diff_args;
+mod info_args;
 mod pr_args;
 
 use diff_args::{Commands, DiffArgs};
+use info_args::InfoArgs;
 use pr_args::PrArgs;
 
 #[derive(Parser)]
@@ -118,6 +120,7 @@ pub fn run() -> ExitCode {
     match command {
         Some(Commands::Diff(args)) => return diff_command(args),
         Some(Commands::Pr(args)) => return pr_command(args),
+        Some(Commands::Info(args)) => return info_command(args),
         None => {}
     }
     if let Some(topic) = info {
@@ -174,6 +177,10 @@ fn pr_command(args: PrArgs) -> ExitCode {
         ),
         json: args.json,
     })
+}
+
+fn info_command(args: InfoArgs) -> ExitCode {
+    info::run(args.topic.as_deref())
 }
 
 fn delta_options(
