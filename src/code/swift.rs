@@ -2,8 +2,10 @@ use tree_sitter::Node;
 
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
+use crate::code::call::CallRule;
 use crate::code::collector;
 use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
+use crate::code::mutation::MutationRule;
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_statement"),
@@ -30,6 +32,12 @@ pub const BRANCH_RULES: &[BranchRule] = &[
 const TYPE_KINDS: &[&str] = &["class_declaration", "protocol_declaration"];
 
 const COMMENT_KINDS: &[&str] = &["comment", "multiline_comment"];
+
+const CALL_RULES: &[CallRule] = &[CallRule::new("call_expression")];
+
+// Unifies `=` and compound assignment (`+=`, etc.) already; modern Swift has
+// no `++`/`--`.
+const MUTATION_RULES: &[MutationRule] = &[MutationRule::new("assignment")];
 
 /// Parses Swift source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
@@ -66,6 +74,14 @@ impl LanguageRules for SwiftRules {
 
     fn comment_kinds(&self) -> &'static [&'static str] {
         COMMENT_KINDS
+    }
+
+    fn call_rules(&self) -> &'static [CallRule] {
+        CALL_RULES
+    }
+
+    fn mutation_rules(&self) -> &'static [MutationRule] {
+        MUTATION_RULES
     }
 }
 
@@ -252,6 +268,22 @@ mod tests {
         let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
+    }
+
+    #[test]
+    fn file_complexity_counts_calls_and_mutations() {
+        let source = "func f() {\n\
+             var y = foo()\n\
+             y = y + 1\n\
+             y += 1\n\
+             bar()\n\
+             }\n";
+        let complexity = file_complexity(source, &BranchFilter::default());
+        // calls: foo(), bar(). mutations: y = ..., y += ....
+        assert_eq!(
+            testing::activity_summary(&complexity),
+            vec![("f".to_string(), 2, 2)]
+        );
     }
 
     #[test]

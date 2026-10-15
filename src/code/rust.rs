@@ -2,8 +2,10 @@ use tree_sitter::Node;
 
 use crate::code::FileComplexity;
 use crate::code::branch::{BranchFilter, BranchKind, BranchRule};
+use crate::code::call::CallRule;
 use crate::code::collector;
 use crate::code::collector::{FunctionDecl, LanguageRules, TypeDecl, Visit};
+use crate::code::mutation::MutationRule;
 
 pub const BRANCH_RULES: &[BranchRule] = &[
     BranchRule::new(BranchKind::If, "if_expression"),
@@ -38,6 +40,18 @@ pub const BRANCH_RULES: &[BranchRule] = &[
 const TYPE_KINDS: &[&str] = &["struct_item", "enum_item", "trait_item", "union_item"];
 
 const COMMENT_KINDS: &[&str] = &["line_comment", "block_comment"];
+
+const CALL_RULES: &[CallRule] = &[
+    CallRule::new("call_expression"),
+    CallRule::new("macro_invocation"),
+];
+
+const MUTATION_RULES: &[MutationRule] = &[
+    MutationRule::new("assignment_expression"),
+    MutationRule::new("compound_assignment_expr"),
+    // `&expr` only mutates when it borrows mutably (`&mut expr`).
+    MutationRule::when("reference_expression", is_mutable_reference),
+];
 
 /// Parses Rust source and returns the cyclomatic complexity of each function,
 /// grouped by containing type.
@@ -80,6 +94,14 @@ impl LanguageRules for RustRules {
     fn comment_kinds(&self) -> &'static [&'static str] {
         COMMENT_KINDS
     }
+
+    fn call_rules(&self) -> &'static [CallRule] {
+        CALL_RULES
+    }
+
+    fn mutation_rules(&self) -> &'static [MutationRule] {
+        MUTATION_RULES
+    }
 }
 
 /// The trait an impl block implements, if any. Trait supertraits
@@ -102,6 +124,10 @@ fn has_match_guard(node: Node, _source: &str) -> bool {
 fn is_boolean_operator(node: Node, _source: &str) -> bool {
     node.child_by_field_name("operator")
         .is_some_and(|operator| matches!(operator.kind(), "&&" | "||"))
+}
+
+fn is_mutable_reference(node: Node, _source: &str) -> bool {
+    collector::find_child(node, "mutable_specifier").is_some()
 }
 
 #[cfg(test)]
@@ -199,6 +225,23 @@ mod tests {
         let complexity = file_complexity("", &BranchFilter::default());
         assert!(complexity.functions.is_empty());
         assert!(complexity.types.is_empty());
+    }
+
+    #[test]
+    fn file_complexity_counts_calls_and_mutations() {
+        let source = "fn f() {\n\
+             let mut y = foo();\n\
+             y = y + 1;\n\
+             y += 1;\n\
+             let r = &mut y;\n\
+             bar!();\n\
+             }\n";
+        let complexity = file_complexity(source, &BranchFilter::default());
+        // calls: foo(), bar!(). mutations: y = ..., y += ..., &mut y.
+        assert_eq!(
+            testing::activity_summary(&complexity),
+            vec![("f".to_string(), 2, 3)]
+        );
     }
 
     #[test]

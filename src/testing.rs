@@ -30,6 +30,16 @@ pub fn top_level_summary(complexity: &FileComplexity) -> Vec<(String, usize)> {
         .collect()
 }
 
+/// Summarizes top-level functions as `(name, calls, mutations)` triples for
+/// assertions.
+pub fn activity_summary(complexity: &FileComplexity) -> Vec<(String, usize, usize)> {
+    complexity
+        .functions
+        .iter()
+        .map(|function| (function.name.clone(), function.calls, function.mutations))
+        .collect()
+}
+
 /// Summarizes each type as `(name, [supertypes])` for assertions.
 pub fn supertype_summary(complexity: &FileComplexity) -> Vec<(String, Vec<String>)> {
     complexity
@@ -54,6 +64,26 @@ pub fn type_summary(complexity: &FileComplexity) -> Vec<(String, Vec<(String, us
                 .functions
                 .iter()
                 .map(|function| (function.name.clone(), function.complexity))
+                .collect();
+            (complexity_type.name.clone(), functions)
+        })
+        .collect()
+}
+
+/// `(type name, [(function name, calls, mutations)])`.
+type TypeActivitySummary = (String, Vec<(String, usize, usize)>);
+
+/// Summarizes each type's functions as `(name, calls, mutations)` triples
+/// for assertions, keyed by type name.
+pub fn type_activity_summary(complexity: &FileComplexity) -> Vec<TypeActivitySummary> {
+    complexity
+        .types
+        .iter()
+        .map(|complexity_type| {
+            let functions = complexity_type
+                .functions
+                .iter()
+                .map(|function| (function.name.clone(), function.calls, function.mutations))
                 .collect();
             (complexity_type.name.clone(), functions)
         })

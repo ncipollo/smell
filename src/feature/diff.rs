@@ -21,7 +21,7 @@ pub mod classify;
 pub mod delta;
 mod git;
 
-pub use classify::{DiffStatus, FunctionDiff};
+pub use classify::{DiffStatus, FlatActivity, FunctionDiff};
 
 /// A file's measures at one revision, kept around after classifying
 /// functions so [`delta`] can diff the other measures without re-parsing.

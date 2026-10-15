@@ -2,11 +2,13 @@
 //! organized by language type.
 
 pub mod branch;
+pub mod call;
 mod collector;
 pub mod csharp;
 pub mod java;
 pub mod javascript;
 pub mod kotlin;
+pub mod mutation;
 pub mod python;
 pub mod rust;
 pub mod swift;
@@ -17,6 +19,10 @@ pub struct FunctionComplexity {
     pub name: String,
     /// Cyclomatic complexity: a baseline of 1 plus one per branch.
     pub complexity: usize,
+    /// Function/method invocations within the function body.
+    pub calls: usize,
+    /// Assignments and other mutating operations within the function body.
+    pub mutations: usize,
 }
 
 /// A class/struct/enum/trait-like declaration and the functions it contains.
@@ -122,6 +128,8 @@ mod tests {
         FunctionComplexity {
             name: name.to_string(),
             complexity,
+            calls: 0,
+            mutations: 0,
         }
     }
 
