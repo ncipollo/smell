@@ -10,6 +10,7 @@ version = "0.6.0"
 [dependencies]
 clap = { version = "4.6.4", features = ["derive"] }
 comfy-table = "7.2.2"
+git2 = { version = "0.21.0", features = ["vendored-libgit2"] }
 globset = "0.4.19"
 rayon = "1.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -31,3 +32,4 @@ too_many_lines = "warn"
 too_many_arguments = "warn"
 
 [dev-dependencies]
+tempfile = "3.27.0"
