@@ -1,11 +1,14 @@
-//! Topic registry for `--info`, so AI agents can walk documentation one
-//! topic at a time instead of reading a single giant page.
+//! Topic registry for `--info`/`smell info`, so AI agents can walk
+//! documentation one topic at a time instead of reading a single giant
+//! page.
 
 mod branches;
 mod checks;
 mod config;
+mod diff_pr;
 mod filters;
 mod languages;
+mod review;
 mod usage;
 
 pub struct Topic {
@@ -44,6 +47,16 @@ pub const TOPICS: &[Topic] = &[
         name: "checks",
         summary: "--max-* limit checks and quiet mode",
         render: checks::render,
+    },
+    Topic {
+        name: "diff-pr",
+        summary: "Invoking diff vs pr, shared --delta-* flags, which to pick",
+        render: diff_pr::render,
+    },
+    Topic {
+        name: "review",
+        summary: "Turning smell pr/diff output into a PR description, comments, or chat",
+        render: review::render,
     },
 ];
 
