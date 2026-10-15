@@ -7,11 +7,14 @@ use crate::Overrides;
 use crate::cli::complexity;
 use crate::cli::diff;
 use crate::cli::info;
+use crate::cli::pr;
 use crate::feature::diff::delta::DeltaOptions;
 
 mod diff_args;
+mod pr_args;
 
-use diff_args::Commands;
+use diff_args::{Commands, DiffArgs};
+use pr_args::PrArgs;
 
 #[derive(Parser)]
 #[command(name = "smell", version, about, subcommand_negates_reqs = true)]
@@ -112,21 +115,10 @@ pub fn run() -> ExitCode {
         json,
         info,
     } = Cli::parse();
-    if let Some(Commands::Diff(args)) = command {
-        return diff::run(diff::DiffRunArgs {
-            repo: args.repo,
-            old_ref: args.old_ref,
-            new_ref: args.new_ref,
-            paths: args.paths,
-            delta: DeltaOptions {
-                max_methods: args.delta_methods,
-                max_lines: args.delta_lines,
-                max_declarations: args.delta_declarations,
-                max_comment_lines: args.delta_comment_lines,
-                max_comments: args.delta_comments,
-            },
-            json: args.json,
-        });
+    match command {
+        Some(Commands::Diff(args)) => return diff_command(args),
+        Some(Commands::Pr(args)) => return pr_command(args),
+        None => {}
     }
     if let Some(topic) = info {
         return info::run(topic.as_deref());
@@ -149,6 +141,55 @@ pub fn run() -> ExitCode {
         quiet,
         json,
     )
+}
+
+fn diff_command(args: DiffArgs) -> ExitCode {
+    diff::run(diff::DiffRunArgs {
+        repo: args.repo,
+        old_ref: args.old_ref,
+        new_ref: args.new_ref,
+        paths: args.paths,
+        delta: delta_options(
+            args.delta_methods,
+            args.delta_lines,
+            args.delta_declarations,
+            args.delta_comment_lines,
+            args.delta_comments,
+        ),
+        json: args.json,
+    })
+}
+
+fn pr_command(args: PrArgs) -> ExitCode {
+    pr::run(pr::PrRunArgs {
+        repo: args.repo,
+        reference: args.reference,
+        paths: args.paths,
+        delta: delta_options(
+            args.delta_methods,
+            args.delta_lines,
+            args.delta_declarations,
+            args.delta_comment_lines,
+            args.delta_comments,
+        ),
+        json: args.json,
+    })
+}
+
+fn delta_options(
+    max_methods: Option<usize>,
+    max_lines: Option<usize>,
+    max_declarations: Option<usize>,
+    max_comment_lines: Option<usize>,
+    max_comments: Option<usize>,
+) -> DeltaOptions {
+    DeltaOptions {
+        max_methods,
+        max_lines,
+        max_declarations,
+        max_comment_lines,
+        max_comments,
+    }
 }
 
 #[cfg(test)]
