@@ -3,3 +3,4 @@
 pub mod complexity;
 pub mod diff;
 pub mod info;
+pub mod pr;

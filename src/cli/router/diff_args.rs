@@ -2,10 +2,15 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
+use super::pr_args::PrArgs;
+
 #[derive(Subcommand)]
 pub(super) enum Commands {
     /// Compare complexity between two git commits.
     Diff(DiffArgs),
+    /// Compare complexity between a PR's base and head commits (or an
+    /// explicit `<old>..<new>` range).
+    Pr(PrArgs),
 }
 
 #[derive(Args)]
