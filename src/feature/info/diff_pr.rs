@@ -32,6 +32,12 @@ fn decision_section() -> String {
          GitHub PR identifier is available and smell should resolve the\n\
          base/head commits itself instead of a manual `git fetch`/\n\
          `merge-base`.\n\n\
+         Producing reviewer-facing focus points (see --info review) is a\n\
+         separate question from which refs are in hand: prefer pr there\n\
+         even when both commit refs are already known, since it ties the\n\
+         report to an actual review target instead of a bare commit\n\
+         pair. Reach for diff only when the low-level complexity-delta\n\
+         numbers are wanted on their own.\n\n\
          See also: --info review, --info checks.\n",
     )
 }

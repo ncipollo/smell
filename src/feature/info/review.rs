@@ -1,42 +1,75 @@
-//! The `review` topic: turning `smell diff`/`smell pr` output into a PR
+//! The `review` topic: turning `smell pr`/`smell diff` output into a PR
 //! description, PR comments, or plain conversational text.
 
 pub fn render() -> String {
-    format!("{}\n{}", report_section(), destination_section())
+    format!(
+        "{}\n{}\n{}",
+        report_section(),
+        structure_section(),
+        destination_section()
+    )
 }
 
 fn report_section() -> String {
     String::from(
-        "WHAT THE REPORT CONTAINS\n\
-         `smell diff`/`smell pr` always print a per-function complexity\n\
-         table (added/removed/changed, before/after/Δ; unchanged functions\n\
-         are omitted automatically). Any configured --delta-* flag adds a\n\
+        "WHICH COMMAND TO RUN\n\
+         Prefer `smell pr <reference> <path>...` for review focus points,\n\
+         even when both commit refs are already known — it ties the\n\
+         report to an actual review target (a PR) instead of a bare\n\
+         commit pair. Reach for `smell diff` only for low-level\n\
+         complexity-delta numbers on their own (a CI threshold check, an\n\
+         ad-hoc before/after count), not when the output is headed\n\
+         toward a human reviewer.\n\n\
+         WHAT THE REPORT CONTAINS\n\
+         Both subcommands always print a per-function complexity table\n\
+         (added/removed/changed, before/after/Δ; unchanged functions are\n\
+         omitted automatically). Any configured --delta-* flag adds a\n\
          check-failure section for a swing in method count, line count,\n\
          declaration count, comment length, or comment count between the\n\
          two revisions (same shape as the --max-* failures in --info\n\
-         checks, but relative instead of absolute).\n\n\
+         checks, but relative instead of absolute).\n",
+    )
+}
+
+fn structure_section() -> String {
+    String::from(
+        "STRUCTURE OF A REVIEW SUMMARY\n\
+         Lead with a 1-2 sentence human-readable summary of what changed\n\
+         and why, in plain prose — no table, no jargon. Follow it with\n\
+         bullets that each name a specific place to focus review, not a\n\
+         restatement of the diff.\n\n\
+         Make every bullet explicit about what actually happened. A\n\
+         complexity swing names the function and states that complexity\n\
+         was added to it, with the before/after numbers, e.g.:\n\
+         \x20 added complexity to process(), 8 to 19\n\
+         A new function or call site is named outright, e.g.:\n\
+         \x20 adds a call to validate() inside save()\n\
+         Never summarize these as \"some complexity changed\" or \"new\n\
+         functions were added\" — name the function.\n\n\
          WHAT TO FOREGROUND\n\
          A failing --delta-* check first — it's the loudest signal and\n\
          usually the point of the run. Then the functions with the\n\
-         largest complexity Δ: growth is more actionable than shrinkage.\n\
-         Then newly added functions that start out complex. Removed\n\
-         functions and small deltas are noise; skip them.\n",
+         largest complexity Δ, each written as a complexity-added bullet\n\
+         (see above); growth is more actionable than shrinkage. Then\n\
+         newly added functions and call sites that start out complex,\n\
+         named explicitly. Removed functions and small deltas are noise;\n\
+         skip them.\n",
     )
 }
 
 fn destination_section() -> String {
     String::from(
-        "DESTINATION CHANGES THE SHAPE, NOT THE SUBSTANCE\n\
-         PR DESCRIPTION: a compact \"complexity impact\" section. Lead with\n\
-         any failing check, in bold; follow with 2-4 bullet highlights of\n\
-         the biggest swings. Never paste the full table.\n\n\
-         PR COMMENTS: one comment per hotspot (file or function), dropped\n\
-         near the relevant diff hunk rather than one monolithic dump\n\
-         comment. Keep each comment to the function name and its\n\
-         before-to-after delta.\n\n\
-         PLAIN CHAT TEXT: conversational prose, no markdown tables or\n\
-         headers. Cite the 1-3 figures that matter, e.g. \"process()'s\n\
-         complexity went from 8 to 19\".\n\n\
+        "DESTINATION ADAPTS PRESENTATION, NOT THE EXPLICITNESS\n\
+         PR DESCRIPTION: the summary-then-bullets structure above, in\n\
+         full — lead with any failing check, in bold; follow with the\n\
+         explicit complexity-added/new-call bullets. Never paste the\n\
+         full table.\n\n\
+         PR COMMENTS: the same explicitness, one comment per hotspot\n\
+         (file or function), dropped near the relevant diff hunk instead\n\
+         of one monolithic dump comment.\n\n\
+         PLAIN CHAT TEXT: the same explicitness in conversational prose\n\
+         instead of bullets — still name the function and the\n\
+         before-to-after numbers, just without markdown structure.\n\n\
          See also: --info diff-pr, --info checks.\n",
     )
 }
@@ -44,6 +77,35 @@ fn destination_section() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_documents_preferring_pr_over_diff() {
+        let page = render();
+        assert!(page.contains("WHICH COMMAND TO RUN"));
+        assert!(page.contains("Prefer `smell pr"));
+        assert!(page.contains("Reach for `smell diff` only for low-level"));
+    }
+
+    #[test]
+    fn page_documents_the_summary_then_bullets_structure() {
+        let page = render();
+        assert!(page.contains("STRUCTURE OF A REVIEW SUMMARY"));
+        assert!(page.contains("1-2 sentence human-readable summary"));
+    }
+
+    #[test]
+    fn page_documents_explicit_complexity_bullets() {
+        let page = render();
+        assert!(page.contains("complexity\nwas added to it"));
+        assert!(page.contains("added complexity to process(), 8 to 19"));
+    }
+
+    #[test]
+    fn page_documents_explicit_new_call_bullets() {
+        let page = render();
+        assert!(page.contains("A new function or call site is named outright"));
+        assert!(page.contains("adds a call to validate() inside save()"));
+    }
 
     #[test]
     fn page_documents_what_to_foreground() {
