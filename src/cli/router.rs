@@ -1,12 +1,17 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{Args, Parser, Subcommand};
+use clap::Parser;
 
 use crate::Overrides;
 use crate::cli::complexity;
 use crate::cli::diff;
 use crate::cli::info;
+use crate::feature::diff::delta::DeltaOptions;
+
+mod diff_args;
+
+use diff_args::Commands;
 
 #[derive(Parser)]
 #[command(name = "smell", version, about, subcommand_negates_reqs = true)]
@@ -88,35 +93,6 @@ struct Cli {
     info: Option<Option<String>>,
 }
 
-#[derive(Subcommand)]
-enum Commands {
-    /// Compare complexity between two git commits.
-    Diff(DiffArgs),
-}
-
-#[derive(Args)]
-struct DiffArgs {
-    /// Commit ref to diff from.
-    old_ref: String,
-
-    /// Commit ref to diff to.
-    new_ref: String,
-
-    /// Paths (relative to the repository root) to analyze; directories are
-    /// searched recursively.
-    #[arg(value_name = "PATH", num_args = 1.., required = true)]
-    paths: Vec<PathBuf>,
-
-    /// Path to the local git repository, or any directory inside it
-    /// (defaults to the current working directory).
-    #[arg(long, value_name = "PATH", default_value = ".")]
-    repo: PathBuf,
-
-    /// Print the diff as JSON.
-    #[arg(long)]
-    json: bool,
-}
-
 pub fn run() -> ExitCode {
     let Cli {
         command,
@@ -137,7 +113,20 @@ pub fn run() -> ExitCode {
         info,
     } = Cli::parse();
     if let Some(Commands::Diff(args)) = command {
-        return diff::run(args.repo, args.old_ref, args.new_ref, args.paths, args.json);
+        return diff::run(diff::DiffRunArgs {
+            repo: args.repo,
+            old_ref: args.old_ref,
+            new_ref: args.new_ref,
+            paths: args.paths,
+            delta: DeltaOptions {
+                max_methods: args.delta_methods,
+                max_lines: args.delta_lines,
+                max_declarations: args.delta_declarations,
+                max_comment_lines: args.delta_comment_lines,
+                max_comments: args.delta_comments,
+            },
+            json: args.json,
+        });
     }
     if let Some(topic) = info {
         return info::run(topic.as_deref());
@@ -382,40 +371,6 @@ mod tests {
     fn json_conflicts_with_quiet() {
         assert!(Cli::try_parse_from(["smell", "src", "--json", "--quiet"]).is_err());
         assert!(Cli::try_parse_from(["smell", "src", "--json", "-q"]).is_err());
-    }
-
-    #[test]
-    fn parses_diff_subcommand() {
-        let cli = Cli::try_parse_from(["smell", "diff", "HEAD~1", "HEAD", "src"])
-            .expect("diff should parse");
-        let Some(Commands::Diff(args)) = cli.command else {
-            panic!("expected a diff subcommand");
-        };
-        assert_eq!(args.old_ref, "HEAD~1");
-        assert_eq!(args.new_ref, "HEAD");
-        assert_eq!(args.paths, vec![PathBuf::from("src")]);
-        assert_eq!(args.repo, PathBuf::from("."));
-        assert!(!args.json);
-    }
-
-    #[test]
-    fn parses_diff_repo_and_json() {
-        let cli = Cli::try_parse_from([
-            "smell", "diff", "HEAD~1", "HEAD", "src", "--repo", "../other", "--json",
-        ])
-        .expect("diff should parse");
-        let Some(Commands::Diff(args)) = cli.command else {
-            panic!("expected a diff subcommand");
-        };
-        assert_eq!(args.repo, PathBuf::from("../other"));
-        assert!(args.json);
-    }
-
-    #[test]
-    fn diff_requires_both_refs_and_a_path() {
-        assert!(Cli::try_parse_from(["smell", "diff"]).is_err());
-        assert!(Cli::try_parse_from(["smell", "diff", "HEAD~1"]).is_err());
-        assert!(Cli::try_parse_from(["smell", "diff", "HEAD~1", "HEAD"]).is_err());
     }
 
     #[test]
