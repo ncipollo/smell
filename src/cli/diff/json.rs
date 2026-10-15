@@ -3,11 +3,19 @@
 
 use serde::Serialize;
 
+use crate::CheckResult;
 use crate::feature::diff::{DiffPathError, DiffReport, DiffStatus, FileDiff, FunctionDiff};
 
-pub fn render(report: &DiffReport) -> String {
+mod check;
+
+use check::Check;
+
+/// Renders the diff (and, when any delta measure is configured, its check
+/// result) as a pretty-printed JSON document.
+pub fn render(report: &DiffReport, results: &[CheckResult]) -> String {
     let document = Document {
         files: report.files.iter().map(File::new).collect(),
+        check: Check::new(results),
         errors: report.errors.iter().map(Error::new).collect(),
     };
     serde_json::to_string_pretty(&document).expect("DTOs are always representable as JSON")
@@ -16,6 +24,8 @@ pub fn render(report: &DiffReport) -> String {
 #[derive(Serialize)]
 struct Document {
     files: Vec<File>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    check: Option<Check>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     errors: Vec<Error>,
 }
@@ -112,7 +122,7 @@ mod tests {
     use super::*;
 
     fn parse(report: &DiffReport) -> Value {
-        serde_json::from_str(&render(report)).expect("valid json")
+        serde_json::from_str(&render(report, &[])).expect("valid json")
     }
 
     fn function(type_name: Option<&str>, name: &str, status: DiffStatus) -> FunctionDiff {
@@ -128,6 +138,8 @@ mod tests {
         let report = DiffReport {
             files: vec![FileDiff {
                 path: PathBuf::from("src/a.rs"),
+                old: None,
+                new: None,
                 functions: vec![
                     function(None, "added", DiffStatus::Added { complexity: 2 }),
                     function(None, "removed", DiffStatus::Removed { complexity: 3 }),
@@ -187,6 +199,40 @@ mod tests {
         assert_eq!(
             document["errors"],
             json!([{ "path": "gone.rs", "message": "not found in either revision" }])
+        );
+    }
+
+    #[test]
+    fn check_is_omitted_when_no_delta_measure_is_configured() {
+        let report = DiffReport {
+            files: vec![],
+            errors: vec![],
+        };
+        let document = serde_json::from_str::<Value>(&render(&report, &[])).expect("valid json");
+        assert!(document.get("check").is_none());
+    }
+
+    #[test]
+    fn check_is_present_when_a_delta_measure_is_configured() {
+        use crate::feature::complexity::check::{CheckFailure, Measure, Subject};
+
+        let report = DiffReport {
+            files: vec![],
+            errors: vec![],
+        };
+        let results = [CheckResult {
+            measure: Measure::Lines,
+            limit: 10,
+            failures: vec![CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                subject: Subject::File(15),
+            }],
+        }];
+        let document =
+            serde_json::from_str::<Value>(&render(&report, &results)).expect("valid json");
+        assert_eq!(
+            document["check"]["lines"],
+            json!({ "limit": 10, "failures": [{ "path": "src/a.rs", "delta": 15 }] })
         );
     }
 }

@@ -1,3 +1,4 @@
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -5,41 +6,56 @@ use comfy_table::Table;
 
 mod json;
 
+use crate::CheckResult;
+use crate::cli::check_format::format_results;
 use crate::diff;
+use crate::feature::diff::delta::{self, DeltaOptions};
 use crate::feature::diff::{DiffReport, DiffStatus, FileDiff, FunctionDiff};
 
-pub fn run(
-    repo: PathBuf,
-    old_ref: String,
-    new_ref: String,
-    paths: Vec<PathBuf>,
-    json: bool,
-) -> ExitCode {
-    let report = match diff(&repo, &old_ref, &new_ref, &paths) {
+pub struct DiffRunArgs {
+    pub repo: PathBuf,
+    pub old_ref: String,
+    pub new_ref: String,
+    pub paths: Vec<PathBuf>,
+    pub delta: DeltaOptions,
+    pub json: bool,
+}
+
+pub fn run(args: DiffRunArgs) -> ExitCode {
+    let report = match diff(&args.repo, &args.old_ref, &args.new_ref, &args.paths) {
         Ok(report) => report,
         Err(error) => {
             eprintln!("error: {error}");
             return ExitCode::FAILURE;
         }
     };
-    if !json {
+    if !args.json {
         for error in &report.errors {
             eprintln!("error: {}: {}", error.path.display(), error.message);
         }
     }
-    emit(&report, json);
-    if report.errors.is_empty() {
+    let results = delta::check(&report.files, &args.delta);
+    emit(&report, &results, args.json);
+    exit_code(&report, &results)
+}
+
+fn exit_code(report: &DiffReport, results: &[CheckResult]) -> ExitCode {
+    if report.errors.is_empty() && !results.iter().any(CheckResult::failed) {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
 }
 
-fn emit(report: &DiffReport, json: bool) {
+fn emit(report: &DiffReport, results: &[CheckResult], json: bool) {
     if json {
-        println!("{}", self::json::render(report));
+        println!("{}", self::json::render(report, results));
     } else {
         print!("{}", format_files(&report.files));
+        let text = format_results(results, io::stderr().is_terminal());
+        if !text.is_empty() {
+            eprint!("{text}");
+        }
     }
 }
 
@@ -116,24 +132,33 @@ mod tests {
         }
     }
 
+    fn file_diff(path: &str, functions: Vec<FunctionDiff>) -> FileDiff {
+        FileDiff {
+            path: PathBuf::from(path),
+            functions,
+            old: None,
+            new: None,
+        }
+    }
+
     #[test]
     fn format_files_includes_the_file_path() {
-        let files = [FileDiff {
-            path: PathBuf::from("src/a.rs"),
-            functions: vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
-        }];
+        let files = [file_diff(
+            "src/a.rs",
+            vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
+        )];
         assert!(format_files(&files).contains("src/a.rs"));
     }
 
     #[test]
     fn format_files_omits_unchanged_functions_and_counts_them() {
-        let files = [FileDiff {
-            path: PathBuf::from("src/a.rs"),
-            functions: vec![
+        let files = [file_diff(
+            "src/a.rs",
+            vec![
                 function(None, "a", DiffStatus::Unchanged { complexity: 1 }),
                 function(None, "b", DiffStatus::Added { complexity: 2 }),
             ],
-        }];
+        )];
         let text = format_files(&files);
         assert!(!text.contains(" a "));
         assert!(text.contains("b"));
@@ -142,10 +167,10 @@ mod tests {
 
     #[test]
     fn format_files_has_no_omitted_line_when_nothing_is_unchanged() {
-        let files = [FileDiff {
-            path: PathBuf::from("src/a.rs"),
-            functions: vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
-        }];
+        let files = [file_diff(
+            "src/a.rs",
+            vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
+        )];
         assert!(!format_files(&files).contains("omitted"));
     }
 
@@ -183,5 +208,32 @@ mod tests {
     fn row_is_none_for_unchanged() {
         let diff = function(None, "a", DiffStatus::Unchanged { complexity: 1 });
         assert!(row(&diff).is_none());
+    }
+
+    fn empty_report() -> DiffReport {
+        DiffReport {
+            files: vec![],
+            errors: vec![],
+        }
+    }
+
+    #[test]
+    fn exit_code_is_success_with_no_errors_or_failures() {
+        assert_eq!(exit_code(&empty_report(), &[]), ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn exit_code_is_failure_when_a_delta_check_fails() {
+        use crate::feature::complexity::check::{CheckFailure, Measure, Subject};
+
+        let results = [CheckResult {
+            measure: Measure::Lines,
+            limit: 10,
+            failures: vec![CheckFailure {
+                path: PathBuf::from("src/a.rs"),
+                subject: Subject::File(15),
+            }],
+        }];
+        assert_eq!(exit_code(&empty_report(), &results), ExitCode::FAILURE);
     }
 }

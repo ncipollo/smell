@@ -13,18 +13,30 @@ use std::path::{Path, PathBuf};
 use git2::{Repository, Tree};
 use rayon::prelude::*;
 
+use crate::code::FileComplexity;
 use crate::code::branch::BranchFilter;
 use crate::feature::complexity::router;
 
 pub mod classify;
+pub mod delta;
 mod git;
 
 pub use classify::{DiffStatus, FunctionDiff};
+
+/// A file's measures at one revision, kept around after classifying
+/// functions so [`delta`] can diff the other measures without re-parsing.
+#[derive(Debug)]
+pub struct Snapshot {
+    pub lines: usize,
+    pub complexity: FileComplexity,
+}
 
 #[derive(Debug)]
 pub struct FileDiff {
     pub path: PathBuf,
     pub functions: Vec<FunctionDiff>,
+    pub old: Option<Snapshot>,
+    pub new: Option<Snapshot>,
 }
 
 /// A path that couldn't be diffed: absent from both revisions, or whose
@@ -136,21 +148,31 @@ fn build_file_diff(
     new_src: Option<String>,
 ) -> Option<FileDiff> {
     let filter = BranchFilter::default();
-    let old = old_src
-        .as_deref()
-        .and_then(|source| router::file_complexity(path, source, &filter));
-    let new = new_src
-        .as_deref()
-        .and_then(|source| router::file_complexity(path, source, &filter));
-    let functions = classify::classify_file(old.as_ref(), new.as_ref());
+    let old = snapshot(path, old_src.as_deref(), &filter);
+    let new = snapshot(path, new_src.as_deref(), &filter);
+    let functions = classify::classify_file(
+        old.as_ref().map(|snapshot| &snapshot.complexity),
+        new.as_ref().map(|snapshot| &snapshot.complexity),
+    );
     if functions.is_empty() {
         None
     } else {
         Some(FileDiff {
             path: path.to_path_buf(),
             functions,
+            old,
+            new,
         })
     }
+}
+
+fn snapshot(path: &Path, source: Option<&str>, filter: &BranchFilter) -> Option<Snapshot> {
+    let source = source?;
+    let complexity = router::file_complexity(path, source, filter)?;
+    Some(Snapshot {
+        lines: source.lines().count(),
+        complexity,
+    })
 }
 
 #[cfg(test)]
@@ -267,5 +289,37 @@ mod tests {
         assert!(report.files.is_empty());
         assert_eq!(report.errors.len(), 1);
         assert_eq!(report.errors[0].path, PathBuf::from("missing.rs"));
+    }
+
+    #[test]
+    fn diff_carries_old_and_new_snapshots_for_delta_checks() {
+        let dir = init_repo();
+        fs::write(dir.path().join("lib.rs"), "fn a() {}\n").unwrap();
+        commit_all(dir.path(), "first");
+
+        fs::write(
+            dir.path().join("lib.rs"),
+            "fn a() {}\nfn b() {}\nfn c() {}\n",
+        )
+        .unwrap();
+        commit_all(dir.path(), "second");
+
+        let report =
+            diff(dir.path(), "HEAD~1", "HEAD", &[PathBuf::from("lib.rs")]).expect("diff succeeds");
+        let file = &report.files[0];
+
+        assert_eq!(file.old.as_ref().unwrap().lines, 1);
+        assert_eq!(file.new.as_ref().unwrap().lines, 3);
+        assert_eq!(
+            delta::check(
+                &report.files,
+                &delta::DeltaOptions {
+                    max_lines: Some(1),
+                    ..delta::DeltaOptions::default()
+                }
+            )
+            .len(),
+            1
+        );
     }
 }
