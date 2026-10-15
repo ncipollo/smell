@@ -57,23 +57,25 @@ struct CommitRef {
 pub fn resolve_pr(owner: &str, repo: &str, number: u64) -> Result<ShaPair, GitHubError> {
     let token = resolve_token();
     let url = format!("https://api.github.com/repos/{owner}/{repo}/pulls/{number}");
-    let mut request = ureq::get(&url)
+    let client = reqwest::blocking::Client::new();
+    let mut request = client
+        .get(&url)
         .header("Accept", "application/vnd.github+json")
         .header("User-Agent", "smell-cli");
     if let Some(token) = &token {
         request = request.header("Authorization", format!("Bearer {token}"));
     }
-    match request.call() {
-        Ok(mut response) => {
-            let body = response
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| GitHubError::Request(error.to_string()))?;
-            parse_response(&body)
-        }
-        Err(ureq::Error::StatusCode(code)) => Err(status_error(code, token.is_some())),
-        Err(error) => Err(GitHubError::Request(error.to_string())),
+    let response = request
+        .send()
+        .map_err(|error| GitHubError::Request(error.to_string()))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(status_error(status.as_u16(), token.is_some()));
     }
+    let body = response
+        .text()
+        .map_err(|error| GitHubError::Request(error.to_string()))?;
+    parse_response(&body)
 }
 
 fn parse_response(body: &str) -> Result<ShaPair, GitHubError> {
