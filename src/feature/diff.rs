@@ -39,6 +39,36 @@ pub struct FileDiff {
     pub new: Option<Snapshot>,
 }
 
+impl FileDiff {
+    /// The file didn't exist at the old revision — every function in
+    /// [`FileDiff::functions`] is therefore `Added`.
+    pub fn is_new(&self) -> bool {
+        self.old.is_none() && self.new.is_some()
+    }
+
+    /// The file doesn't exist at the new revision — every function in
+    /// [`FileDiff::functions`] is therefore `Removed`.
+    pub fn is_removed(&self) -> bool {
+        self.new.is_none() && self.old.is_some()
+    }
+
+    /// Sum of each function's current-side complexity (after for
+    /// added/changed/unchanged, before for removed) — the whole-file
+    /// complexity total a reviewer wants for a brand new or wholly removed
+    /// file, where a per-function list alone doesn't convey the file's size.
+    pub fn total_complexity(&self) -> usize {
+        self.functions
+            .iter()
+            .map(|function| match function.status {
+                DiffStatus::Added { complexity }
+                | DiffStatus::Removed { complexity }
+                | DiffStatus::Unchanged { complexity } => complexity,
+                DiffStatus::Changed { after, .. } => after,
+            })
+            .sum()
+    }
+}
+
 /// A path that couldn't be diffed: absent from both revisions, or whose
 /// blob content couldn't be read.
 #[derive(Debug)]
@@ -321,5 +351,80 @@ mod tests {
             .len(),
             1
         );
+    }
+
+    fn function_diff(name: &str, status: DiffStatus) -> FunctionDiff {
+        FunctionDiff {
+            type_name: None,
+            name: name.to_string(),
+            status,
+            flat_active: None,
+        }
+    }
+
+    fn snapshot() -> Snapshot {
+        Snapshot {
+            lines: 1,
+            complexity: FileComplexity::default(),
+        }
+    }
+
+    #[test]
+    fn a_file_with_no_old_snapshot_is_new() {
+        let file = FileDiff {
+            path: PathBuf::from("a.rs"),
+            functions: vec![],
+            old: None,
+            new: Some(snapshot()),
+        };
+        assert!(file.is_new());
+        assert!(!file.is_removed());
+    }
+
+    #[test]
+    fn a_file_with_no_new_snapshot_is_removed() {
+        let file = FileDiff {
+            path: PathBuf::from("a.rs"),
+            functions: vec![],
+            old: Some(snapshot()),
+            new: None,
+        };
+        assert!(file.is_removed());
+        assert!(!file.is_new());
+    }
+
+    #[test]
+    fn a_file_present_on_both_sides_is_neither_new_nor_removed() {
+        let file = FileDiff {
+            path: PathBuf::from("a.rs"),
+            functions: vec![],
+            old: Some(snapshot()),
+            new: Some(snapshot()),
+        };
+        assert!(!file.is_new());
+        assert!(!file.is_removed());
+    }
+
+    #[test]
+    fn total_complexity_sums_every_function_on_its_current_side() {
+        let file = FileDiff {
+            path: PathBuf::from("a.rs"),
+            functions: vec![
+                function_diff("a", DiffStatus::Added { complexity: 3 }),
+                function_diff("b", DiffStatus::Added { complexity: 4 }),
+                function_diff(
+                    "c",
+                    DiffStatus::Changed {
+                        before: 1,
+                        after: 5,
+                    },
+                ),
+                function_diff("d", DiffStatus::Unchanged { complexity: 2 }),
+                function_diff("e", DiffStatus::Removed { complexity: 9 }),
+            ],
+            old: None,
+            new: None,
+        };
+        assert_eq!(file.total_complexity(), 3 + 4 + 5 + 2 + 9);
     }
 }
