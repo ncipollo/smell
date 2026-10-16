@@ -67,7 +67,7 @@ fn format_files(files: &[FileDiff]) -> String {
 }
 
 fn format_file(file: &FileDiff) -> String {
-    let mut text = format!("{}\n", file.path.display());
+    let mut text = format!("{}{}\n", file.path.display(), file_status_suffix(file));
     let mut table = Table::new();
     table.set_header(["Function", "Status", "Before", "After", "Δ"]);
     let mut omitted = 0;
@@ -83,8 +83,41 @@ fn format_file(file: &FileDiff) -> String {
     if omitted > 0 {
         text.push_str(&format!("{omitted} unchanged function(s) omitted\n"));
     }
+    if let Some(summary) = whole_file_summary(file) {
+        text.push_str(&summary);
+    }
     text.push('\n');
     text
+}
+
+/// `" (new file)"`/`" (removed)"` next to the path, so a reviewer sees at a
+/// glance that every row below belongs to a file that didn't exist before
+/// (or doesn't exist any more) rather than a function added to/removed from
+/// an existing file.
+fn file_status_suffix(file: &FileDiff) -> &'static str {
+    if file.is_new() {
+        " (new file)"
+    } else if file.is_removed() {
+        " (removed)"
+    } else {
+        ""
+    }
+}
+
+/// A whole-file complexity total for a new or removed file — the per-row
+/// table already lists each function as `added`/`removed`, but not the
+/// file's overall size, which is what a reviewer actually needs to gauge
+/// how much review attention a brand new file deserves.
+fn whole_file_summary(file: &FileDiff) -> Option<String> {
+    if !file.is_new() && !file.is_removed() {
+        return None;
+    }
+    let count = file.functions.len();
+    let noun = if count == 1 { "function" } else { "functions" };
+    Some(format!(
+        "{count} {noun}, total complexity {}\n",
+        file.total_complexity()
+    ))
 }
 
 fn name(function: &FunctionDiff) -> String {
@@ -152,6 +185,7 @@ fn activity_note(activity: &FlatActivity) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::feature::diff::Snapshot;
 
     fn function(type_name: Option<&str>, name: &str, status: DiffStatus) -> FunctionDiff {
         FunctionDiff {
@@ -180,6 +214,31 @@ mod tests {
         }
     }
 
+    fn snapshot() -> Snapshot {
+        Snapshot {
+            lines: 1,
+            complexity: crate::code::FileComplexity::default(),
+        }
+    }
+
+    fn new_file_diff(path: &str, functions: Vec<FunctionDiff>) -> FileDiff {
+        FileDiff {
+            path: PathBuf::from(path),
+            functions,
+            old: None,
+            new: Some(snapshot()),
+        }
+    }
+
+    fn removed_file_diff(path: &str, functions: Vec<FunctionDiff>) -> FileDiff {
+        FileDiff {
+            path: PathBuf::from(path),
+            functions,
+            old: Some(snapshot()),
+            new: None,
+        }
+    }
+
     #[test]
     fn format_files_includes_the_file_path() {
         let files = [file_diff(
@@ -187,6 +246,51 @@ mod tests {
             vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
         )];
         assert!(format_files(&files).contains("src/a.rs"));
+    }
+
+    #[test]
+    fn format_files_marks_a_brand_new_file_and_sums_its_complexity() {
+        let files = [new_file_diff(
+            "src/brandnew.rs",
+            vec![
+                function(None, "a", DiffStatus::Added { complexity: 3 }),
+                function(None, "b", DiffStatus::Added { complexity: 4 }),
+            ],
+        )];
+        let text = format_files(&files);
+        assert!(text.contains("src/brandnew.rs (new file)"));
+        assert!(text.contains("2 functions, total complexity 7"));
+    }
+
+    #[test]
+    fn format_files_marks_a_wholly_removed_file_and_sums_its_complexity() {
+        let files = [removed_file_diff(
+            "src/gone.rs",
+            vec![function(None, "a", DiffStatus::Removed { complexity: 5 })],
+        )];
+        let text = format_files(&files);
+        assert!(text.contains("src/gone.rs (removed)"));
+        assert!(text.contains("1 function, total complexity 5"));
+    }
+
+    #[test]
+    fn format_files_has_no_new_or_removed_suffix_for_an_existing_file() {
+        let files = [file_diff(
+            "src/a.rs",
+            vec![function(
+                None,
+                "a",
+                DiffStatus::Changed {
+                    before: 1,
+                    after: 2,
+                },
+            )],
+        )];
+        let text = format_files(&files);
+        assert!(text.contains("src/a.rs\n"));
+        assert!(!text.contains("new file"));
+        assert!(!text.contains("(removed)"));
+        assert!(!text.contains("total complexity"));
     }
 
     #[test]

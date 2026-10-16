@@ -50,13 +50,23 @@ impl Error {
 #[derive(Serialize)]
 struct File {
     path: String,
+    #[serde(skip_serializing_if = "is_false")]
+    new_file: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    removed_file: bool,
     functions: Vec<Function>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 impl File {
     fn new(file: &FileDiff) -> Self {
         File {
             path: file.path.display().to_string(),
+            new_file: file.is_new(),
+            removed_file: file.is_removed(),
             functions: file.functions.iter().map(Function::new).collect(),
         }
     }
@@ -157,6 +167,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
+    use crate::feature::diff::Snapshot;
 
     fn parse(report: &DiffReport) -> Value {
         serde_json::from_str(&render(report, &[])).expect("valid json")
@@ -249,6 +260,68 @@ mod tests {
                 }
             })
         );
+    }
+
+    fn snapshot() -> Snapshot {
+        Snapshot {
+            lines: 1,
+            complexity: crate::code::FileComplexity::default(),
+        }
+    }
+
+    #[test]
+    fn new_file_is_flagged_and_removed_file_is_not() {
+        let report = DiffReport {
+            files: vec![FileDiff {
+                path: PathBuf::from("src/brandnew.rs"),
+                old: None,
+                new: Some(snapshot()),
+                functions: vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
+            }],
+            errors: vec![],
+        };
+        let document = parse(&report);
+        assert_eq!(document["files"][0]["new_file"], json!(true));
+        assert!(document["files"][0].get("removed_file").is_none());
+    }
+
+    #[test]
+    fn removed_file_is_flagged_and_new_file_is_not() {
+        let report = DiffReport {
+            files: vec![FileDiff {
+                path: PathBuf::from("src/gone.rs"),
+                old: Some(snapshot()),
+                new: None,
+                functions: vec![function(None, "a", DiffStatus::Removed { complexity: 1 })],
+            }],
+            errors: vec![],
+        };
+        let document = parse(&report);
+        assert_eq!(document["files"][0]["removed_file"], json!(true));
+        assert!(document["files"][0].get("new_file").is_none());
+    }
+
+    #[test]
+    fn an_existing_file_flags_neither() {
+        let report = DiffReport {
+            files: vec![FileDiff {
+                path: PathBuf::from("src/a.rs"),
+                old: Some(snapshot()),
+                new: Some(snapshot()),
+                functions: vec![function(
+                    None,
+                    "a",
+                    DiffStatus::Changed {
+                        before: 1,
+                        after: 2,
+                    },
+                )],
+            }],
+            errors: vec![],
+        };
+        let document = parse(&report);
+        assert!(document["files"][0].get("new_file").is_none());
+        assert!(document["files"][0].get("removed_file").is_none());
     }
 
     #[test]
