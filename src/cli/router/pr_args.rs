@@ -53,6 +53,10 @@ pub(super) struct PrArgs {
     /// Print the diff as JSON.
     #[arg(long)]
     pub(super) json: bool,
+
+    /// Show every analyzed file, including files with no changed functions.
+    #[arg(long)]
+    pub(super) verbose: bool,
 }
 
 #[cfg(test)]
@@ -74,6 +78,7 @@ mod tests {
         assert_eq!(args.paths, vec![PathBuf::from("src")]);
         assert_eq!(args.repo, PathBuf::from("."));
         assert!(!args.json);
+        assert!(!args.verbose);
         assert_eq!(args.delta_methods, None);
         assert_eq!(args.delta_lines, None);
         assert_eq!(args.delta_declarations, None);
@@ -123,6 +128,16 @@ mod tests {
         assert_eq!(args.delta_comments, Some(3));
         assert_eq!(args.repo, PathBuf::from("../other"));
         assert!(args.json);
+    }
+
+    #[test]
+    fn parses_pr_verbose_flag() {
+        let cli = Cli::try_parse_from(["smell", "pr", "123", "--verbose"])
+            .expect("pr --verbose should parse");
+        let Some(Commands::Pr(args)) = cli.command else {
+            panic!("expected a pr subcommand");
+        };
+        assert!(args.verbose);
     }
 
     #[test]

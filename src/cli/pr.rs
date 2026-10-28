@@ -23,6 +23,7 @@ pub struct PrRunArgs {
     pub paths: Vec<PathBuf>,
     pub delta: DeltaOptions,
     pub json: bool,
+    pub verbose: bool,
 }
 
 pub fn run(args: PrRunArgs) -> ExitCode {
@@ -46,7 +47,7 @@ pub fn run(args: PrRunArgs) -> ExitCode {
         }
     }
     let results = delta::check(&report.files, &args.delta);
-    emit(&report, &results, args.json);
+    emit(&report, &results, args.json, args.verbose);
     exit_code(&report, &results)
 }
 
@@ -58,11 +59,11 @@ fn exit_code(report: &DiffReport, results: &[CheckResult]) -> ExitCode {
     }
 }
 
-fn emit(report: &DiffReport, results: &[CheckResult], json: bool) {
+fn emit(report: &DiffReport, results: &[CheckResult], json: bool, verbose: bool) {
     if json {
         println!("{}", self::json::render(report, results));
     } else {
-        print!("{}", format_files(&report.files));
+        print!("{}", format_files(&report.files, verbose));
         let text = format_results(results, io::stderr().is_terminal());
         if !text.is_empty() {
             eprint!("{text}");
@@ -82,6 +83,7 @@ mod tests {
             paths: vec![PathBuf::from("does-not-exist.rs")],
             delta: DeltaOptions::default(),
             json: false,
+            verbose: false,
         };
         // A missing path is a soft per-path error in the diff engine, not a
         // crash here.
@@ -96,6 +98,7 @@ mod tests {
             paths: vec![PathBuf::from("src")],
             delta: DeltaOptions::default(),
             json: false,
+            verbose: false,
         };
         assert_eq!(run(args), ExitCode::FAILURE);
     }

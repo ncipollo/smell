@@ -4,9 +4,25 @@ use crate::feature::diff::{DiffStatus, FileDiff, FlatActivity, FunctionDiff};
 
 /// Renders one table per file, omitting unchanged functions — the
 /// mechanical-vs-real noise a diff is meant to filter out — with a trailing
-/// count of how many were omitted.
-pub(super) fn format_files(files: &[FileDiff]) -> String {
-    files.iter().map(format_file).collect()
+/// count of how many were omitted. Unless `verbose`, files with nothing to
+/// review are dropped too, with a trailing count.
+pub(super) fn format_files(files: &[FileDiff], verbose: bool) -> String {
+    let (shown, omitted): (Vec<&FileDiff>, Vec<&FileDiff>) =
+        files.iter().partition(|file| verbose || is_notable(file));
+    let mut text: String = shown.into_iter().map(format_file).collect();
+    if !omitted.is_empty() {
+        text.push_str(&format!(
+            "{} unchanged file(s) omitted (use --verbose to show)\n",
+            omitted.len()
+        ));
+    }
+    text
+}
+
+/// New and removed files are always notable; otherwise a file needs at least
+/// one function that renders a row.
+fn is_notable(file: &FileDiff) -> bool {
+    file.is_new() || file.is_removed() || file.functions.iter().any(|f| row(f).is_some())
 }
 
 fn format_file(file: &FileDiff) -> String {
@@ -189,7 +205,7 @@ mod tests {
             "src/a.rs",
             vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
         )];
-        assert!(format_files(&files).contains("src/a.rs"));
+        assert!(format_files(&files, false).contains("src/a.rs"));
     }
 
     #[test]
@@ -201,7 +217,7 @@ mod tests {
                 function(None, "b", DiffStatus::Added { complexity: 4 }),
             ],
         )];
-        let text = format_files(&files);
+        let text = format_files(&files, false);
         assert!(text.contains("src/brandnew.rs (new file)"));
         assert!(text.contains("2 functions, total complexity 7"));
     }
@@ -212,7 +228,7 @@ mod tests {
             "src/gone.rs",
             vec![function(None, "a", DiffStatus::Removed { complexity: 5 })],
         )];
-        let text = format_files(&files);
+        let text = format_files(&files, false);
         assert!(text.contains("src/gone.rs (removed)"));
         assert!(text.contains("1 function, total complexity 5"));
     }
@@ -230,7 +246,7 @@ mod tests {
                 },
             )],
         )];
-        let text = format_files(&files);
+        let text = format_files(&files, false);
         assert!(text.contains("src/a.rs\n"));
         assert!(!text.contains("new file"));
         assert!(!text.contains("(removed)"));
@@ -246,7 +262,7 @@ mod tests {
                 function(None, "b", DiffStatus::Added { complexity: 2 }),
             ],
         )];
-        let text = format_files(&files);
+        let text = format_files(&files, false);
         assert!(!text.contains(" a "));
         assert!(text.contains("b"));
         assert!(text.contains("1 unchanged function(s) omitted"));
@@ -258,7 +274,7 @@ mod tests {
             "src/a.rs",
             vec![function(None, "a", DiffStatus::Added { complexity: 1 })],
         )];
-        assert!(!format_files(&files).contains("omitted"));
+        assert!(!format_files(&files, false).contains("omitted"));
     }
 
     #[test]
@@ -337,8 +353,73 @@ mod tests {
                 },
             )],
         )];
-        let text = format_files(&files);
+        let text = format_files(&files, false);
         assert!(text.contains("mutations +1"));
         assert!(!text.contains("omitted"));
+    }
+
+    fn unchanged_file(path: &str) -> FileDiff {
+        file_diff(
+            path,
+            vec![function(None, "a", DiffStatus::Unchanged { complexity: 1 })],
+        )
+    }
+
+    #[test]
+    fn format_files_omits_files_with_only_unchanged_functions() {
+        let files = [
+            unchanged_file("src/quiet.rs"),
+            file_diff(
+                "src/loud.rs",
+                vec![function(None, "b", DiffStatus::Added { complexity: 2 })],
+            ),
+        ];
+        let text = format_files(&files, false);
+        assert!(!text.contains("src/quiet.rs"));
+        assert!(text.contains("src/loud.rs"));
+        assert!(text.contains("1 unchanged file(s) omitted (use --verbose to show)"));
+    }
+
+    #[test]
+    fn format_files_keeps_a_file_with_a_flat_active_function() {
+        let files = [file_diff(
+            "src/a.rs",
+            vec![flat_active_function(
+                "a",
+                1,
+                FlatActivity {
+                    calls_before: 0,
+                    calls_after: 1,
+                    mutations_before: 0,
+                    mutations_after: 0,
+                },
+            )],
+        )];
+        let text = format_files(&files, false);
+        assert!(text.contains("src/a.rs"));
+        assert!(!text.contains("file(s) omitted"));
+    }
+
+    #[test]
+    fn format_files_keeps_new_and_removed_files_even_when_functions_are_unchanged() {
+        let files = [
+            new_file_diff("src/new.rs", vec![]),
+            removed_file_diff(
+                "src/gone.rs",
+                vec![function(None, "a", DiffStatus::Unchanged { complexity: 1 })],
+            ),
+        ];
+        let text = format_files(&files, false);
+        assert!(text.contains("src/new.rs (new file)"));
+        assert!(text.contains("src/gone.rs (removed)"));
+        assert!(!text.contains("file(s) omitted"));
+    }
+
+    #[test]
+    fn format_files_verbose_shows_every_file() {
+        let files = [unchanged_file("src/quiet.rs")];
+        let text = format_files(&files, true);
+        assert!(text.contains("src/quiet.rs"));
+        assert!(!text.contains("file(s) omitted"));
     }
 }

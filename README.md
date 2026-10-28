@@ -57,9 +57,12 @@ smell pr owner/repo#123                             # explicit repository
 smell pr https://github.com/owner/repo/pull/123     # full PR URL
 smell pr HEAD~1..HEAD src                           # explicit commit range, limited to src
 smell pr 123 --delta-methods 3                      # exit non-zero if any type's method count swung by more than 3
+smell pr 123 --verbose                              # also list files with no changed functions
 ```
 
 PATH defaults to the whole repository. Run it from the PR's repository, or point at it with `--repo <PATH>`.
+
+By default only files with changed functions, plus new and removed files, are listed. Pass `--verbose` to list every file. Delta checks, the exit code and `--json` always cover every file.
 
 Run `smell --info pr` for the full invocation details, or `smell --info review` for turning the output into review focus points.
 
