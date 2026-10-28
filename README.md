@@ -45,7 +45,7 @@ smell src --max-comment-lines 40                        # exit non-zero if any c
 smell src --max-comments 25                             # exit non-zero if any file has more than 25 comments
 ```
 
-`--include`/`--exclude` and `--implements` are repeatable. Run `smell --info` for a directory of documentation topics (usage, config, languages, branches, filters, checks, diff-pr, review), or `smell --info branches` to drill straight into one.
+`--include`/`--exclude` and `--implements` are repeatable. Run `smell --info` for a directory of documentation topics (usage, config, languages, branches, filters, checks, pr, review), or `smell --info branches` to drill straight into one.
 
 ## Reviewing pull requests
 
@@ -59,9 +59,9 @@ smell pr HEAD~1..HEAD src                           # explicit commit range, lim
 smell pr 123 --delta-methods 3                      # exit non-zero if any type's method count swung by more than 3
 ```
 
-PATH defaults to the whole repository. Run it from the PR's repository, or point at it with `--repo <PATH>`. When both commit refs are already known and only the raw complexity deltas are wanted, use `smell diff <OLD> <NEW> <PATH>...` instead.
+PATH defaults to the whole repository. Run it from the PR's repository, or point at it with `--repo <PATH>`.
 
-Run `smell --info diff-pr` for the full invocation details, or `smell --info review` for turning the output into review focus points.
+Run `smell --info pr` for the full invocation details, or `smell --info review` for turning the output into review focus points.
 
 ## Configuration
 

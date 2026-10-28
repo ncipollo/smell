@@ -62,7 +62,7 @@ mod tests {
     use clap::Parser;
 
     use super::super::Cli;
-    use super::super::diff_args::Commands;
+    use super::super::commands::Commands;
 
     #[test]
     fn parses_pr_subcommand() {
@@ -137,5 +137,11 @@ mod tests {
             panic!("expected a pr subcommand");
         };
         assert_eq!(args.paths, vec![PathBuf::from(".")]);
+    }
+
+    #[test]
+    fn diff_is_no_longer_a_subcommand() {
+        let parsed = Cli::try_parse_from(["smell", "diff", "HEAD~1", "HEAD", "src"]);
+        assert!(parsed.map_or(true, |cli| cli.command.is_none()));
     }
 }

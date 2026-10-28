@@ -5,16 +5,15 @@ use clap::Parser;
 
 use crate::Overrides;
 use crate::cli::complexity;
-use crate::cli::diff;
 use crate::cli::info;
 use crate::cli::pr;
 use crate::feature::diff::delta::DeltaOptions;
 
-mod diff_args;
+mod commands;
 mod info_args;
 mod pr_args;
 
-use diff_args::{Commands, DiffArgs};
+use commands::Commands;
 use info_args::InfoArgs;
 use pr_args::PrArgs;
 
@@ -118,7 +117,6 @@ pub fn run() -> ExitCode {
         info,
     } = Cli::parse();
     match command {
-        Some(Commands::Diff(args)) => return diff_command(args),
         Some(Commands::Pr(args)) => return pr_command(args),
         Some(Commands::Info(args)) => return info_command(args),
         None => {}
@@ -144,23 +142,6 @@ pub fn run() -> ExitCode {
         quiet,
         json,
     )
-}
-
-fn diff_command(args: DiffArgs) -> ExitCode {
-    diff::run(diff::DiffRunArgs {
-        repo: args.repo,
-        old_ref: args.old_ref,
-        new_ref: args.new_ref,
-        paths: args.paths,
-        delta: delta_options(
-            args.delta_methods,
-            args.delta_lines,
-            args.delta_declarations,
-            args.delta_comment_lines,
-            args.delta_comments,
-        ),
-        json: args.json,
-    })
 }
 
 fn pr_command(args: PrArgs) -> ExitCode {

@@ -5,9 +5,9 @@
 mod branches;
 mod checks;
 mod config;
-mod diff_pr;
 mod filters;
 mod languages;
+mod pr;
 mod review;
 mod usage;
 
@@ -49,9 +49,9 @@ pub const TOPICS: &[Topic] = &[
         render: checks::render,
     },
     Topic {
-        name: "diff-pr",
-        summary: "Invoking pr (PR review focus areas) vs diff (raw deltas), shared --delta-* flags",
-        render: diff_pr::render,
+        name: "pr",
+        summary: "Invoking smell pr to find PR review focus areas, --delta-* flags",
+        render: pr::render,
     },
     Topic {
         name: "review",

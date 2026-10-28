@@ -1,4 +1,4 @@
-//! The `review` topic: turning `smell pr`/`smell diff` output into a PR
+//! The `review` topic: turning `smell pr` output into a PR
 //! description, PR comments, or plain conversational text.
 
 pub fn render() -> String {
@@ -13,16 +13,10 @@ pub fn render() -> String {
 fn report_section() -> String {
     String::from(
         "WHICH COMMAND TO RUN\n\
-         `smell pr` exists to find the areas to focus on in a PR review.\n\
-         Prefer `smell pr <reference> [path]...` for review focus points,\n\
-         even when both commit refs are already known — it ties the\n\
-         report to an actual review target (a PR) instead of a bare\n\
-         commit pair. Reach for `smell diff` only for low-level\n\
-         complexity-delta numbers on their own (a CI threshold check, an\n\
-         ad-hoc before/after count), not when the output is headed\n\
-         toward a human reviewer.\n\n\
+         `smell pr <reference> [path]...` finds the areas to focus on in\n\
+         a PR review; run it to get review focus points.\n\n\
          WHAT THE REPORT CONTAINS\n\
-         Both subcommands always print a per-function complexity table\n\
+         `smell pr` always prints a per-function complexity table\n\
          (added/removed/changed, before/after/Δ; unchanged functions are\n\
          omitted automatically). Any configured --delta-* flag adds a\n\
          check-failure section for a swing in method count, line count,\n\
@@ -85,7 +79,7 @@ fn destination_section() -> String {
          PLAIN CHAT TEXT: the same explicitness in conversational prose\n\
          instead of bullets — still name the function and the\n\
          before-to-after numbers, just without markdown structure.\n\n\
-         See also: --info diff-pr, --info checks.\n",
+         See also: --info pr, --info checks.\n",
     )
 }
 
@@ -94,11 +88,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn page_documents_preferring_pr_over_diff() {
+    fn page_documents_which_command_to_run() {
         let page = render();
         assert!(page.contains("WHICH COMMAND TO RUN"));
-        assert!(page.contains("Prefer `smell pr"));
-        assert!(page.contains("Reach for `smell diff` only for low-level"));
+        assert!(page.contains("`smell pr <reference> [path]...` finds"));
+        assert!(!page.contains("smell diff"));
     }
 
     #[test]
