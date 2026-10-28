@@ -4,7 +4,8 @@ use clap::Args;
 
 #[derive(Args)]
 pub(super) struct PrArgs {
-    /// A commit range (`<old>..<new>`) or a GitHub PR reference: a full
+    /// The change under review: a commit range (`<old>..<new>`) or a GitHub
+    /// PR reference: a full
     /// URL, `owner/repo#123`, or a bare number resolved against the
     /// current repo's `origin` remote.
     pub(super) reference: String,

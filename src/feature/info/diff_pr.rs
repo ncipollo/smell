@@ -11,8 +11,9 @@ fn invocation_section() -> String {
          smell diff <OLD_REF> <NEW_REF> <PATH>...\n\
          Compares two explicit commit refs against a local repo.\n\n\
          smell pr <REFERENCE> [PATH]...\n\
-         Resolves REFERENCE to a base/head commit pair, then runs the same\n\
-         diff. REFERENCE is one of: an explicit `<old>..<new>` range\n\
+         Surfaces the areas of a pull request that deserve attention\n\
+         during review. Resolves REFERENCE to a base/head commit pair,\n\
+         then runs the same complexity diff. REFERENCE is one of: an explicit `<old>..<new>` range\n\
          (forwarded as-is), a GitHub PR URL, `owner/repo#123`, or a bare PR\n\
          number resolved against the current repo's `origin` remote. PATH\n\
          defaults to \".\" (the whole repository). Run it from the PR's\n\
@@ -29,17 +30,16 @@ fn invocation_section() -> String {
 fn decision_section() -> String {
     String::from(
         "WHICH TO USE\n\
-         Use diff when both commit refs are already in hand: local branch\n\
-         work, CI with known SHAs, comparing two tags. Use pr when only a\n\
-         GitHub PR identifier is available and smell should resolve the\n\
-         base/head commits itself instead of a manual `git fetch`/\n\
-         `merge-base`.\n\n\
+         Use pr when finding the areas that deserve focus in a PR review:\n\
+         it resolves a GitHub PR identifier to the base/head commits\n\
+         itself (no manual `git fetch`/`merge-base`) and ties the report\n\
+         to an actual review target. Use diff when both commit refs are already\n\
+         in hand and only the raw complexity-delta numbers are wanted:\n\
+         CI with known SHAs, comparing two tags.\n\n\
          Producing reviewer-facing focus points (see --info review) is a\n\
          separate question from which refs are in hand: prefer pr there\n\
-         even when both commit refs are already known, since it ties the\n\
-         report to an actual review target instead of a bare commit\n\
-         pair. Reach for diff only when the low-level complexity-delta\n\
-         numbers are wanted on their own.\n\n\
+         even when both commit refs are already known. Reach for diff\n\
+         only when the low-level numbers are wanted on their own.\n\n\
          See also: --info review, --info checks.\n",
     )
 }
@@ -67,6 +67,13 @@ mod tests {
         assert!(page.contains("WHICH TO USE"));
         assert!(page.contains("Use diff when"));
         assert!(page.contains("Use pr when"));
+    }
+
+    #[test]
+    fn page_frames_pr_as_review_focus_finder() {
+        let page = render();
+        assert!(page.contains("deserve attention\nduring review"));
+        assert!(page.contains("Use pr when finding the areas"));
     }
 
     #[test]

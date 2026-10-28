@@ -50,12 +50,12 @@ pub const TOPICS: &[Topic] = &[
     },
     Topic {
         name: "diff-pr",
-        summary: "Invoking diff vs pr, shared --delta-* flags, which to pick",
+        summary: "Invoking pr (PR review focus areas) vs diff (raw deltas), shared --delta-* flags",
         render: diff_pr::render,
     },
     Topic {
         name: "review",
-        summary: "Turning smell pr/diff output into a PR description, comments, or chat",
+        summary: "Turning smell pr output into review focus points for a PR description, comments, or chat",
         render: review::render,
     },
 ];
