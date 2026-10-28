@@ -10,11 +10,13 @@ fn invocation_section() -> String {
         "INVOKING DIFF AND PR\n\
          smell diff <OLD_REF> <NEW_REF> <PATH>...\n\
          Compares two explicit commit refs against a local repo.\n\n\
-         smell pr <REFERENCE> <PATH>...\n\
+         smell pr <REFERENCE> [PATH]...\n\
          Resolves REFERENCE to a base/head commit pair, then runs the same\n\
          diff. REFERENCE is one of: an explicit `<old>..<new>` range\n\
          (forwarded as-is), a GitHub PR URL, `owner/repo#123`, or a bare PR\n\
-         number resolved against the current repo's `origin` remote.\n\n\
+         number resolved against the current repo's `origin` remote. PATH\n\
+         defaults to \".\" (the whole repository). Run it from the PR's\n\
+         repository, or point at that repository with --repo <PATH>.\n\n\
          SHARED FLAGS\n\
          Both subcommands define the same flags: --repo <PATH> (defaults\n\
          to \".\"), --delta-methods/--delta-lines/--delta-declarations/\n\
@@ -54,7 +56,8 @@ mod tests {
     #[test]
     fn page_documents_pr_invocation() {
         let page = render();
-        assert!(page.contains("smell pr <REFERENCE>"));
+        assert!(page.contains("smell pr <REFERENCE> [PATH]..."));
+        assert!(page.contains("defaults to \".\""));
         assert!(page.contains("owner/repo#123"));
     }
 
