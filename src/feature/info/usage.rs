@@ -29,7 +29,7 @@ pub fn render() -> String {
          the paths still get analyzed) or if any configured --max-* check\n\
          fails.\n\n\
          See also: --info config, --info languages, --info branches,\n\
-         --info filters, --info checks, --info diff-pr, --info review.\n",
+         --info filters, --info checks, --info pr, --info review.\n",
     )
 }
 

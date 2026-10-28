@@ -1,68 +1,11 @@
-use std::io::{self, IsTerminal};
-use std::path::PathBuf;
-use std::process::ExitCode;
-
 use comfy_table::Table;
 
-mod json;
-
-use crate::CheckResult;
-use crate::cli::check_format::format_results;
-use crate::diff;
-use crate::feature::diff::delta::{self, DeltaOptions};
-use crate::feature::diff::{DiffReport, DiffStatus, FileDiff, FlatActivity, FunctionDiff};
-
-pub struct DiffRunArgs {
-    pub repo: PathBuf,
-    pub old_ref: String,
-    pub new_ref: String,
-    pub paths: Vec<PathBuf>,
-    pub delta: DeltaOptions,
-    pub json: bool,
-}
-
-pub fn run(args: DiffRunArgs) -> ExitCode {
-    let report = match diff(&args.repo, &args.old_ref, &args.new_ref, &args.paths) {
-        Ok(report) => report,
-        Err(error) => {
-            eprintln!("error: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if !args.json {
-        for error in &report.errors {
-            eprintln!("error: {}: {}", error.path.display(), error.message);
-        }
-    }
-    let results = delta::check(&report.files, &args.delta);
-    emit(&report, &results, args.json);
-    exit_code(&report, &results)
-}
-
-fn exit_code(report: &DiffReport, results: &[CheckResult]) -> ExitCode {
-    if report.errors.is_empty() && !results.iter().any(CheckResult::failed) {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    }
-}
-
-fn emit(report: &DiffReport, results: &[CheckResult], json: bool) {
-    if json {
-        println!("{}", self::json::render(report, results));
-    } else {
-        print!("{}", format_files(&report.files));
-        let text = format_results(results, io::stderr().is_terminal());
-        if !text.is_empty() {
-            eprint!("{text}");
-        }
-    }
-}
+use crate::feature::diff::{DiffStatus, FileDiff, FlatActivity, FunctionDiff};
 
 /// Renders one table per file, omitting unchanged functions — the
 /// mechanical-vs-real noise a diff is meant to filter out — with a trailing
 /// count of how many were omitted.
-fn format_files(files: &[FileDiff]) -> String {
+pub(super) fn format_files(files: &[FileDiff]) -> String {
     files.iter().map(format_file).collect()
 }
 
@@ -186,6 +129,7 @@ fn activity_note(activity: &FlatActivity) -> String {
 mod tests {
     use super::*;
     use crate::feature::diff::Snapshot;
+    use std::path::PathBuf;
 
     fn function(type_name: Option<&str>, name: &str, status: DiffStatus) -> FunctionDiff {
         FunctionDiff {
@@ -396,32 +340,5 @@ mod tests {
         let text = format_files(&files);
         assert!(text.contains("mutations +1"));
         assert!(!text.contains("omitted"));
-    }
-
-    fn empty_report() -> DiffReport {
-        DiffReport {
-            files: vec![],
-            errors: vec![],
-        }
-    }
-
-    #[test]
-    fn exit_code_is_success_with_no_errors_or_failures() {
-        assert_eq!(exit_code(&empty_report(), &[]), ExitCode::SUCCESS);
-    }
-
-    #[test]
-    fn exit_code_is_failure_when_a_delta_check_fails() {
-        use crate::feature::complexity::check::{CheckFailure, Measure, Subject};
-
-        let results = [CheckResult {
-            measure: Measure::Lines,
-            limit: 10,
-            failures: vec![CheckFailure {
-                path: PathBuf::from("src/a.rs"),
-                subject: Subject::File(15),
-            }],
-        }];
-        assert_eq!(exit_code(&empty_report(), &results), ExitCode::FAILURE);
     }
 }

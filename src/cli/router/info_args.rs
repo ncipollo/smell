@@ -11,7 +11,7 @@ mod tests {
     use clap::Parser;
 
     use super::super::Cli;
-    use super::super::diff_args::Commands;
+    use super::super::commands::Commands;
 
     #[test]
     fn parses_info_subcommand() {
