@@ -9,8 +9,9 @@ use super::pr_args::PrArgs;
 pub(super) enum Commands {
     /// Compare complexity between two git commits.
     Diff(DiffArgs),
-    /// Compare complexity between a PR's base and head commits (or an
-    /// explicit `<old>..<new>` range).
+    /// Find areas to focus on in a PR review by comparing complexity
+    /// between the PR's base and head commits (or an explicit
+    /// `<old>..<new>` range).
     Pr(PrArgs),
     /// Print documentation topics (mirrors `--info`/`--info <TOPIC>`).
     Info(InfoArgs),

@@ -13,7 +13,8 @@ pub fn render() -> String {
 fn report_section() -> String {
     String::from(
         "WHICH COMMAND TO RUN\n\
-         Prefer `smell pr <reference> <path>...` for review focus points,\n\
+         `smell pr` exists to find the areas to focus on in a PR review.\n\
+         Prefer `smell pr <reference> [path]...` for review focus points,\n\
          even when both commit refs are already known — it ties the\n\
          report to an actual review target (a PR) instead of a bare\n\
          commit pair. Reach for `smell diff` only for low-level\n\
