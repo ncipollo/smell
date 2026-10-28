@@ -10,8 +10,8 @@ pub(super) struct PrArgs {
     pub(super) reference: String,
 
     /// Paths (relative to the repository root) to analyze; directories are
-    /// searched recursively.
-    #[arg(value_name = "PATH", num_args = 1.., required = true)]
+    /// searched recursively. Defaults to the whole repository.
+    #[arg(value_name = "PATH", num_args = 1.., default_value = ".")]
     pub(super) paths: Vec<PathBuf>,
 
     /// Path to the local git repository, or any directory inside it
@@ -125,8 +125,16 @@ mod tests {
     }
 
     #[test]
-    fn pr_requires_a_reference_and_a_path() {
+    fn pr_requires_a_reference() {
         assert!(Cli::try_parse_from(["smell", "pr"]).is_err());
-        assert!(Cli::try_parse_from(["smell", "pr", "123"]).is_err());
+    }
+
+    #[test]
+    fn pr_defaults_path_to_current_directory() {
+        let cli = Cli::try_parse_from(["smell", "pr", "123"]).expect("pr should parse");
+        let Some(Commands::Pr(args)) = cli.command else {
+            panic!("expected a pr subcommand");
+        };
+        assert_eq!(args.paths, vec![PathBuf::from(".")]);
     }
 }

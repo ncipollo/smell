@@ -97,7 +97,11 @@ impl fmt::Display for DiffError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DiffError::OpenRepo(path, error) => {
-                write!(f, "opening repo at {}: {error}", path.display())
+                write!(
+                    f,
+                    "opening repo at {}: {error}; run from inside a git repository or point at one with --repo <PATH>",
+                    path.display()
+                )
             }
             DiffError::ResolveRef(reference, error) => {
                 write!(f, "resolving ref \"{reference}\": {error}")
@@ -305,6 +309,7 @@ mod tests {
         let error = diff(dir.path(), "HEAD~1", "HEAD", &[PathBuf::from("lib.rs")])
             .expect_err("non-repo path fails");
         assert!(matches!(error, DiffError::OpenRepo(_, _)));
+        assert!(error.to_string().contains("--repo"));
     }
 
     #[test]

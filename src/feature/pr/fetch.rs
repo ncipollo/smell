@@ -9,6 +9,7 @@ use std::path::Path;
 
 use git2::Repository;
 
+use super::REPO_HINT;
 use super::reference::RepoRef;
 
 #[derive(Debug)]
@@ -23,8 +24,12 @@ impl fmt::Display for FetchError {
 /// Fetches `sha` from `repo_ref`'s GitHub clone URL into the repo at
 /// `repo_path`, unless it's already present locally.
 pub fn ensure_present(repo_path: &Path, repo_ref: &RepoRef, sha: &str) -> Result<(), FetchError> {
-    let repo = Repository::discover(repo_path)
-        .map_err(|error| FetchError(format!("opening repo at {}: {error}", repo_path.display())))?;
+    let repo = Repository::discover(repo_path).map_err(|error| {
+        FetchError(format!(
+            "not inside a git repository ({}): {error}; {REPO_HINT}",
+            repo_path.display()
+        ))
+    })?;
     if commit_exists(&repo, sha) {
         return Ok(());
     }
@@ -124,7 +129,8 @@ mod tests {
             owner: "a".to_string(),
             name: "b".to_string(),
         };
-        assert!(ensure_present(Path::new(dir.path()), &repo_ref, "deadbeef").is_err());
+        let error = ensure_present(Path::new(dir.path()), &repo_ref, "deadbeef").unwrap_err();
+        assert!(error.to_string().contains("--repo"));
     }
 
     #[test]

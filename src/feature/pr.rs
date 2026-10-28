@@ -13,6 +13,10 @@ mod remote;
 
 use reference::{PrReference, PrSource, RepoRef};
 
+/// Appended to errors caused by running outside the PR's repository.
+const REPO_HINT: &str =
+    "run smell from the repository the PR belongs to, or point at it with --repo <PATH>";
+
 #[derive(Debug)]
 pub enum PrError {
     Parse(reference::ParseError),
