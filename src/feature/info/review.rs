@@ -17,8 +17,9 @@ fn report_section() -> String {
          a PR review; run it to get review focus points.\n\n\
          WHAT THE REPORT CONTAINS\n\
          `smell pr` always prints a per-function complexity table\n\
-         (added/removed/changed, before/after/Δ; unchanged functions are\n\
-         omitted automatically). Any configured --delta-* flag adds a\n\
+         (added/removed/changed, before/after/Δ). Unchanged functions and\n\
+         files are omitted automatically; --verbose lists every file.\n\
+         Any configured --delta-* flag adds a\n\
          check-failure section for a swing in method count, line count,\n\
          declaration count, comment length, or comment count between the\n\
          two revisions (same shape as the --max-* failures in --info\n\
@@ -93,6 +94,11 @@ mod tests {
         assert!(page.contains("WHICH COMMAND TO RUN"));
         assert!(page.contains("`smell pr <reference> [path]...` finds"));
         assert!(!page.contains("smell diff"));
+    }
+
+    #[test]
+    fn page_mentions_verbose() {
+        assert!(render().contains("--verbose"));
     }
 
     #[test]

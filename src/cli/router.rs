@@ -157,6 +157,7 @@ fn pr_command(args: PrArgs) -> ExitCode {
             args.delta_comments,
         ),
         json: args.json,
+        verbose: args.verbose,
     })
 }
 

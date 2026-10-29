@@ -11,11 +11,12 @@ fn invocation_section() -> String {
          Surfaces the areas of a pull request that deserve attention\n\
          during review. Resolves REFERENCE to a base/head commit pair,\n\
          then diffs complexity between them. REFERENCE is one of: an\n\
-         explicit `<old>..<new>` range (forwarded as-is), a GitHub PR\n\
-         URL, `owner/repo#123`, or a bare PR number resolved against the\n\
-         current repo's `origin` remote. PATH defaults to \".\" (the whole\n\
-         repository). Run it from the PR's repository, or point at that\n\
-         repository with --repo <PATH>.\n",
+         explicit `<old>..<new>` range, a GitHub PR URL, `owner/repo#123`,\n\
+         or a bare PR number resolved against the current repo's `origin`\n\
+         remote. PATH defaults to \".\" (the whole repository). Run it from\n\
+         the PR's repository, or point at it with --repo <PATH>.\n\n\
+         Only files with changed functions, plus new and removed files,\n\
+         are listed; pass --verbose to list every file.\n",
     )
 }
 
@@ -26,7 +27,7 @@ fn flags_section() -> String {
          --delta-declarations/--delta-comment-lines/--delta-comments <N>\n\
          (fail if the swing between the old and new revision exceeds N —\n\
          relative, unlike the absolute --max-* checks in --info checks),\n\
-         and --json.\n\n\
+         --json (JSON always includes every file), and --verbose.\n\n\
          See also: --info review, --info checks.\n",
     )
 }
@@ -54,6 +55,13 @@ mod tests {
         assert!(page.contains("--delta-methods"));
         assert!(page.contains("--repo"));
         assert!(page.contains("--json"));
+    }
+
+    #[test]
+    fn page_documents_verbose_and_default_filtering() {
+        let page = render();
+        assert!(page.contains("--verbose"));
+        assert!(page.contains("new and removed files"));
     }
 
     #[test]
